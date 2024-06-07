@@ -1,0 +1,41 @@
+----1p----
+Number of answers 1p: 38807
+Total number of hard answers: 38807
+----2p----
+Number of answers 2p: 1642
+Number of answers 1p: 84826
+Total number of hard answers: 86468
+----3p----
+Number of answers 3p: 74
+Number of answers 2p: 3282
+Number of answers 1p: 118247
+Total number of hard answers: 121603
+----2i----
+Number of answers 2i: 1531
+Number of answers 1p: 32719
+Total number of hard answers: 34250
+----3i----
+Number of answers 3i: 55
+Number of answers 2i: 1835
+Number of answers 1p: 20639
+Total number of hard answers: 22529
+----pi----
+Number of answers pi: 95
+Number of answers 2i: 6198
+Number of answers 2p: 531
+Number of answers 1p: 45016
+Total number of hard answers: 51840
+----ip----
+Number of answers ip: 93
+Number of answers 2i: 1231
+Number of answers 2p: 1629
+Number of answers 1p: 85376
+Total number of hard answers: 88329
+----up----
+Number of answers up: 0
+Number of answers 2u: 0
+Number of answers 2p: 2114
+Number of answers 1p: 119541
+Total number of hard answers: 121655
+
+
