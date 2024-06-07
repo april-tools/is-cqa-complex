@@ -26,7 +26,7 @@ Each folder in the data represents a KG, including the following files.
 We represent the query structures using a tuple in case we run out of names :), (credits to @michiyasunaga). For example, 1p queries: (e, (r,)) and 2i queries: ((e, (r,)),(e, (r,))). Check the code for more details.
 
 
-** How to run **
+**How to run**
 1. Download data --> download.sh
 2. Run read_queries_pair.py for the datasets FB15k-237-betae, FB15k-betae, NELL-betae. The script will add the folder "test-query-reduction" in each folder of the datasets. 
 The statistics of the reductions are in the folder "reduction statistics".
