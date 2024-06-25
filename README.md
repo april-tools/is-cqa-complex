@@ -33,8 +33,7 @@ The statistics of the reductions are in the folder "reduction statistics".
 3. Train the model you want to test. For CQD, you can use the provided pre-trained models (more details in CQD.md).
 4. To test the subset of 2p queries that can be reduced to 1p using CQD it is sufficient to set --tasks -2p and --subtask 1p. If subtask is None, then the whole orginal set of queries will be tested
 statistics.txt
-python3 main.py --do_test --data_path data/FB15k-237-betae -n 1 -b 1000 -d 1000 --cpu_num 0 --geo cqd 
---tasks 2p --subtask -1p --print_on_screen --test_batch_size 1 --checkpoint_path models/fb15k-237-betae --cqd discrete --cqd-t-norm prod --cqd-k 1024
+5. Run job.sh
 
 
 

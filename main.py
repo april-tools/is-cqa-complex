@@ -5,6 +5,7 @@ from __future__ import division
 from __future__ import print_function
 
 import argparse
+import csv
 import json
 import logging
 import os
@@ -479,6 +480,24 @@ def main(args):
                 if args.do_test:
                     logging.info('Evaluating on Test Dataset...')
                     test_all_metrics = evaluate(model, test_easy_answers, test_hard_answers, args, test_dataloader, query_name_dict, 'Test', step, writer)
+                    hyperparam_metrics = list(test_all_metrics.items())
+                    MRR = hyperparam_metrics[0][1]
+                    HITS1 = hyperparam_metrics[1][1]
+                    HITS3 = hyperparam_metrics[2][1]
+                    HITS10 = hyperparam_metrics[3][1]
+                    cqd_type = ""
+                    if args.cqd_max_norm == 1:
+                        cqd_type = args.geo
+                    else:
+                        cqd_type = args.geo + "hybrid"
+                    validation_run = [args.tasks, args.subtask, args.cqd_t_norm, args.cqd_k, cqd_type,
+                                      MRR, HITS1, HITS3, HITS10]
+
+                    with open(args.save_path + "/results.csv", mode='a', newline='\n') as file:
+                        # file.write('\n')
+                        csv_writer = csv.writer(file, delimiter=';')
+                        # Append the data to the CSV file
+                        csv_writer.writerow(validation_run)
                 
             if step % args.log_steps == 0:
                 metrics = {}
