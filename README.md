@@ -28,28 +28,14 @@ We represent the query structures using a tuple in case we run out of names :), 
 
 **How to run**
 1. Download data --> download.sh
-2. Run read_queries_pair.py for the datasets FB15k-237-betae, FB15k-betae, NELL-betae, just by setting the --dataset option. The script will add the folder "test-query-reduction" in each folder of the datasets. 
-The statistics of the reductions are in the folder "reduction statistics".
+2. Run read_queries_pair.py for the datasets FB15k-237-betae, FB15k-betae, NELL-betae, just by setting the `--dataset` option. The script will add the folder `test-query-reduction` in each folder of the datasets. 
+The statistics of the reductions are in the folder `reduction statistics`.
 3. Train the model you want to test. For CQD, you can use the provided pre-trained models (more details in CQD.md).
-4. To test the subset of 2p queries that can be reduced to 1p using CQD it is sufficient to set --tasks -2p and --subtask 1p. If subtask is None, then the whole orginal set of queries will be tested
+4. To test the subset of 2p queries that can be reduced to 1p using CQD it is sufficient to set `--tasks -2p` and `--subtask 1p`. If subtask is None, then the whole orginal set of queries will be tested
 statistics.txt
 5. Run job.sh
 6. At the end you will see a results.csv in the project folder containing the MRR,H@1,H@3,H@10 of every task/subtask
 
 
-
-**Citations**
-
-If you use this repo, please cite the following paper.
-
-```
-@inproceedings{
- ren2020beta,
- title={Beta Embeddings for Multi-Hop Logical Reasoning in Knowledge Graphs},
- author={Hongyu Ren and Jure Leskovec},
- booktitle={Neural Information Processing Systems},
- year={2020}
-}
-```
 
 
