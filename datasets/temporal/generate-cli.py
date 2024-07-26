@@ -88,7 +88,9 @@ def main():
                               entity2idx_path=entity2idx_path,
                               relation2idx_path=relation2idx_path)
     
+    print(f'{prefix} -- Number of quads before timestep filtering', len(quad_lst))
     quad_lst = filter_minimum_timestep(quad_lst=quad_lst)
+    print(f'{prefix} -- Number of quads after timestep filtering', len(quad_lst))
 
     save_to_tsv(quad_lst=quad_lst, path=os.path.join('generated', f'{prefix}.tsv'))
     
