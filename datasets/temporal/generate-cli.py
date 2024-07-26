@@ -67,8 +67,8 @@ def parse_tsv(path: str,
 def save_to_tsv(tuple_lst: List[Quad], path: str):
     with open(path, 'w') as f:
         writer = csv.writer(f, delimiter='\t')
-        for tuple in tuple_lst:
-            writer.writerow(quad)
+        for tuple_ in tuple_lst:
+            writer.writerow(tuple_)
 
 def main():
     parser = argparse.ArgumentParser(description="Dataset creator")
@@ -95,6 +95,7 @@ def main():
     save_to_tsv(quad_lst=quad_lst, path=os.path.join('generated', f'{prefix}.tsv'))
     
     train_lst, dev_lst, test_lst = split_by_time(quad_lst=quad_lst)
+    
     save_to_tsv(quad_lst=train_lst, path=os.path.join('generated', f'{prefix}_train.tsv'))
     save_to_tsv(quad_lst=dev_lst, path=os.path.join('generated', f'{prefix}_dev.tsv'))
     save_to_tsv(quad_lst=test_lst, path=os.path.join('generated', f'{prefix}_test.tsv'))
