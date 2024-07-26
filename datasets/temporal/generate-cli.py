@@ -64,10 +64,10 @@ def parse_tsv(path: str,
             res += [(subject_, predicate_, object_, timestep_)]
     return res
 
-def save_to_tsv(quad_lst: List[Quad], path: str):
+def save_to_tsv(tuple_lst: List[Quad], path: str):
     with open(path, 'w') as f:
         writer = csv.writer(f, delimiter='\t')
-        for quad in quad_lst:
+        for tuple in tuple_lst:
             writer.writerow(quad)
 
 def main():
