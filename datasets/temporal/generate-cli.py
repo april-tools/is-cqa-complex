@@ -22,7 +22,7 @@ def parse_mapping(path: str) -> Dict[int, str]:
     return res
 
 def split_by_time(quad_lst: List[Quad]) -> Tuple[List[Quad], List[Quad], List[Quad]]:
-    # Sort quads by time step 't'
+    # Sort quads by timestep 't'
     sorted_quads = sorted(quad_lst, key=lambda x: x[3])
     
     total_quads = len(sorted_quads)
@@ -34,6 +34,15 @@ def split_by_time(quad_lst: List[Quad]) -> Tuple[List[Quad], List[Quad], List[Qu
     test_set = sorted_quads[dev_end:]
     
     return train_set, dev_set, test_set
+
+def filter_minimum_timestep(quad_lst: List[Quad]) -> List[Quad]:
+    min_timestep_dict = {}
+    for quad in quad_lst:
+        spo = (quad[0], quad[1], quad[2])
+        if spo not in min_timestep_dict or quad[3] < min_timestep_dict[spo][3]:
+            min_timestep_dict[spo] = quad
+    return list(min_timestep_dict.values())
+
 
 def parse_tsv(path: str,
               entity2idx_path: Optional[str] = None,
@@ -48,11 +57,11 @@ def parse_tsv(path: str,
     with open(path, 'r') as f:
         reader = csv.reader(f, delimiter='\t')
         for row in reader:
-            s = int(row[0]) if entity2idx is None else entity2idx[int(row[0])]
-            p = int(row[1]) if relation2idx is None else relation2idx[int(row[1])]
-            o = int(row[2]) if entity2idx is None else entity2idx[int(row[2])]
-            t = int(row[3])
-            res += [(s, p, o, t)]
+            subject_ = int(row[0]) if entity2idx is None else entity2idx[int(row[0])]
+            predicate_ = int(row[1]) if relation2idx is None else relation2idx[int(row[1])]
+            object_ = int(row[2]) if entity2idx is None else entity2idx[int(row[2])]
+            timestep_ = int(row[3])
+            res += [(subject_, predicate_, object_, timestep_)]
     return res
 
 def save_to_tsv(quad_lst: List[Quad], path: str):
@@ -79,6 +88,8 @@ def main():
                               entity2idx_path=entity2idx_path,
                               relation2idx_path=relation2idx_path)
     
+    quad_lst = filter_minimum_timestep(quad_lst=quad_lst)
+
     save_to_tsv(quad_lst=quad_lst, path=os.path.join('generated', f'{prefix}.tsv'))
     
     train_lst, dev_lst, test_lst = split_by_time(quad_lst=quad_lst)
