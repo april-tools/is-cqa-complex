@@ -1220,7 +1220,7 @@ def ground_queries(dataset, query_structures, ent_in, ent_out, train_ent_in, tra
         #logging.info(perc_top_anch)
         key_rel, perc_rel = get_top_k_frequency(dataset, num_sampled,rel_per_query_overall[list2tuple(query_structure)], 'rel')
         key_ent, perc_anch = get_top_k_frequency(dataset, num_sampled, anch_per_query_overall[list2tuple(query_structure)], 'ent')
-
+        logging.info(num_sampled)
         logging.info("Most present relation name: " + str(key_rel))
         logging.info("Percentage of the relation name wrt total number of (q,a) pair: " + str(perc_rel))
         logging.info("Most present anchor: " + str(key_ent))
