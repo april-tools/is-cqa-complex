@@ -1412,7 +1412,7 @@ def achieve_answer(query, ent_in, ent_out):
 @click.option('--reindex', is_flag=True, default=False)
 @click.option('--gen_train', is_flag=True, default=False)
 @click.option('--gen_valid', is_flag=True, default=False)
-@click.option('--gen_test', is_flag=True, default=True)
+@click.option('--gen_test', is_flag=True, default=False)
 @click.option('--gen_id', default=0)
 @click.option('--save_name', is_flag=True, default=False)
 @click.option('--index_only', is_flag=True, default=False)
