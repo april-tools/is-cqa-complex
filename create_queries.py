@@ -1105,7 +1105,7 @@ def get_top_k_frequency(dataset, num_sampled,ele_per_query, type):
     return data_dict[name_top], perc_top
 
 def ground_queries(dataset, query_structures, ent_in, ent_out, train_ent_in, train_ent_out, test_only_ent_in,
-                   test_only_ent_out, gen_num, max_ans_num, query_names, mode, ent2id, rel2id):
+                   test_only_ent_out, gen_num, max_ans_num, query_names, mode, ent2id, rel2id,seed):
     #print(mode)
     queries = defaultdict(set)
     train_answers = defaultdict(set)
@@ -1113,7 +1113,7 @@ def ground_queries(dataset, query_structures, ent_in, ent_out, train_ent_in, tra
     rel_per_query_overall = defaultdict()
     anch_per_query_overall = defaultdict()
     s0 = time.time()
-    random.seed(0)
+    random.seed(seed)
     perc_top_rel = 0
     perc_top_anch = 0
     for idx, query_structure in enumerate(query_structures):
@@ -1244,7 +1244,7 @@ def ground_queries(dataset, query_structures, ent_in, ent_out, train_ent_in, tra
 
 
 def generate_queries(dataset, query_structures, gen_num, max_ans_num, gen_train, gen_valid, gen_test, query_names,
-                     save_name):
+                     save_name,seed):
     base_path = './data/%s' % dataset
     indexified_files = ['train.txt', 'valid.txt', 'test.txt']
     if gen_train or gen_valid:
@@ -1300,20 +1300,20 @@ def generate_queries(dataset, query_structures, gen_num, max_ans_num, gen_train,
                                                                                 defaultdict(lambda: defaultdict(set)),
                                                                                 None, None,
                                                                                 gen_num[0], max_ans_num, query_names,
-                                                                                'train', ent2id, rel2id)
+                                                                                'train', ent2id, rel2id,seed)
     if gen_valid:
         valid_queries, valid_train_answers, valid_hard_answers = ground_queries(dataset, query_structures,
                                                                                 valid_ent_in, valid_ent_out,
                                                                                 train_ent_in, train_ent_out,
                                                                                 valid_only_ent_in, valid_only_ent_out,
                                                                                 gen_num[1], max_ans_num, query_names,
-                                                                                'valid', ent2id, rel2id)
+                                                                                'valid', ent2id, rel2id,seed)
     if gen_test:
         test_queries, test_train_answers, test_hard_answers = ground_queries(dataset, query_structures,
                                                                              test_ent_in, test_ent_out, valid_ent_in,
                                                                              valid_ent_out, test_only_ent_in,
                                                                              test_only_ent_out, gen_num[2], max_ans_num,
-                                                                             query_names, 'test', ent2id, rel2id)
+                                                                             query_names, 'test', ent2id, rel2id,seed)
     print(dataset)
     print('%s queries generated with structure %s' % (gen_num, query_structures))
 
@@ -1454,9 +1454,9 @@ def main(dataset, seed, gen_train_num, gen_valid_num, gen_test_num, max_ans_num,
         index_dataset(dataset, reindex)
         exit(-1)
     '''
-    if index_only:
-        index_dataset(dataset, reindex)
-        exit(-1)
+    #if index_only:
+    #    index_dataset(dataset, reindex)
+    #    exit(-1)
     e = 'e'
     r = 'r'
     n = 'n'
@@ -1488,9 +1488,9 @@ def main(dataset, seed, gen_train_num, gen_valid_num, gen_test_num, max_ans_num,
     #query_names = ['pi', 'ip', '2u', 'up']  #
     # print(query_structures)
     # print(dataset)
-    gen_test_num = gen_valid_num = 50000
+    gen_test_num = gen_valid_num = 5000
     generate_queries(dataset, query_structures, [gen_train_num, gen_valid_num, gen_test_num], max_ans_num, gen_train,
-                     gen_valid, gen_test, query_names, save_name)
+                     gen_valid, gen_test, query_names, save_name,seed)
 
 
 if __name__ == '__main__':
