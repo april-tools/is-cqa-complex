@@ -304,11 +304,9 @@ def compute_nr_answers(query_structure, query, test_only_ent_out, train_ent_out,
 
         return reachable_answers_3p, rel_per_query, anch_per_query, [rel1, rel2, rel3], [entity]
 
-        # 4p
-
     # 4p
     if query_structure == ['e', ['r', 'r', 'r', 'r']]:
-        reachable_answers_3p = set()
+
         reachable_answers_4p = set()
         entity = query[0]
         rel1 = query[1][0]
@@ -382,20 +380,12 @@ def compute_nr_answers(query_structure, query, test_only_ent_out, train_ent_out,
 
                     reachable_answers_4p = reachable_answers_1111 - reachable_answers_3p - reachable_answers_2p - reachable_answers_1p - train_answer_set  # subtract the train answers and the 1p/2p answers
         if len(reachable_answers_4p) > 0:
-            if rel1 in rel_per_query:
-                rel_per_query[rel1] += len(reachable_answers_4p)
-            else:
-                rel_per_query[rel1] = len(reachable_answers_4p)
-            if rel1 != rel2:
-                if rel2 in rel_per_query:
-                    rel_per_query[rel2] += len(reachable_answers_4p)
+            set_rel = ({rel1, rel2, rel3, rel4})
+            for rel in set_rel:
+                if rel in rel_per_query:
+                    rel_per_query[rel] += len(reachable_answers_4p)
                 else:
-                    rel_per_query[rel2] = len(reachable_answers_4p)
-            if rel3 != rel2 and rel3 != rel1:
-                if rel3 in rel_per_query:
-                    rel_per_query[rel3] += len(reachable_answers_4p)
-                else:
-                    rel_per_query[rel3] = len(reachable_answers_4p)
+                    rel_per_query[rel] = len(reachable_answers_4p)
 
             if entity in anch_per_query:
                 anch_per_query[entity] += len(reachable_answers_4p)
@@ -669,23 +659,18 @@ def compute_nr_answers(query_structure, query, test_only_ent_out, train_ent_out,
 
 
         if len(reachable_answers_4i) > 0:
-            rel_per_query[rel1] = len(reachable_answers_4i)
-            if rel1 != rel2:
-                rel_per_query[rel2] = len(reachable_answers_4i)
-            if rel1 != rel3 and rel2 != rel3:
-                rel_per_query[rel3] = len(reachable_answers_4i)
-
-                anch_per_query[entity1] = len(reachable_answers_4i)
-            if entity1 != entity2:
-                if entity2 in anch_per_query:
-                    anch_per_query[entity2] += len(reachable_answers_4i)
+            set_rel = ({rel1, rel2, rel3, rel4})
+            for rel in set_rel:
+                if rel in rel_per_query:
+                    rel_per_query[rel] += len(reachable_answers_4i)
                 else:
-                    anch_per_query[entity2] = len(reachable_answers_4i)
-            if entity1 != entity3 and entity2 != entity3:
-                if entity3 in anch_per_query:
-                    anch_per_query[entity3] += len(reachable_answers_4i)
+                    rel_per_query[rel] = len(reachable_answers_4i)
+            set_ent = ({entity1, entity2, entity3, entity4})
+            for ent in set_ent:
+                if ent in rel_per_query:
+                    anch_per_query[ent] += len(reachable_answers_4i)
                 else:
-                    anch_per_query[entity3] = len(reachable_answers_4i)
+                    anch_per_query[ent] = len(reachable_answers_4i)
 
         return reachable_answers_4i, rel_per_query, anch_per_query, [rel1, rel2, rel3, rel4], [entity1, entity2, entity3, entity4]
 
@@ -1244,7 +1229,7 @@ def ground_queries(dataset, query_structures, ent_in, ent_out, train_ent_in, tra
 
 
 def generate_queries(dataset, query_structures, gen_num, max_ans_num, gen_train, gen_valid, gen_test, query_names,
-                     save_name,seed):
+                     mode,seed):
     base_path = './data/%s' % dataset
     indexified_files = ['train.txt', 'valid.txt', 'test.txt']
     if gen_train or gen_valid:
@@ -1288,7 +1273,7 @@ def generate_queries(dataset, query_structures, gen_num, max_ans_num, gen_train,
     #    exit(-1)
 
     formatted_date_time = str(datetime.now().strftime("%Y-%m-%d_%H:%M:%S"))
-    name_to_save = formatted_date_time + "_new_bench"
+    name_to_save = formatted_date_time + "_new_bench_" + str(dataset) + "_" + str(mode)
     set_logger("./data/{}/".format(dataset), name_to_save)
     num_sampled, num_try, num_repeat, num_more_answer, num_broken, num_empty = 0, 0, 0, 0, 0, 0
     train_ans_num = []
@@ -1414,11 +1399,12 @@ def achieve_answer(query, ent_in, ent_out):
 @click.option('--gen_valid', is_flag=True, default=False)
 @click.option('--gen_test', is_flag=True, default=False)
 @click.option('--gen_id', default=0)
+@click.option('--mode', default=None)
 @click.option('--save_name', is_flag=True, default=False)
 @click.option('--index_only', is_flag=True, default=False)
 @click.option('--fourp', is_flag=True, default=False)
 def main(dataset, seed, gen_train_num, gen_valid_num, gen_test_num, max_ans_num, reindex, gen_train, gen_valid,
-         gen_test, gen_id, save_name, index_only, fourp):
+         gen_test, gen_id, mode, index_only, fourp):
     '''
     train_num_dict = {'FB15k': 273710, "FB15k-237": 149689, "NELL": 107982}
     valid_num_dict = {'FB15k': 8000, "FB15k-237": 5000, "NELL": 4000}
@@ -1489,8 +1475,12 @@ def main(dataset, seed, gen_train_num, gen_valid_num, gen_test_num, max_ans_num,
     # print(query_structures)
     # print(dataset)
     gen_test_num = gen_valid_num = 5000
+    if gen_test:
+        mode = 'test'
+    elif gen_valid:
+        mode='valid'
     generate_queries(dataset, query_structures, [gen_train_num, gen_valid_num, gen_test_num], max_ans_num, gen_train,
-                     gen_valid, gen_test, query_names, save_name,seed)
+                     gen_valid, gen_test, query_names, mode,seed)
 
 
 if __name__ == '__main__':
