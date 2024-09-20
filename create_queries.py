@@ -667,7 +667,7 @@ def compute_nr_answers(query_structure, query, test_only_ent_out, train_ent_out,
                     rel_per_query[rel] = len(reachable_answers_4i)
             set_ent = ({entity1, entity2, entity3, entity4})
             for ent in set_ent:
-                if ent in ent_per_query:
+                if ent in anch_per_query:
                     anch_per_query[ent] += len(reachable_answers_4i)
                 else:
                     anch_per_query[ent] = len(reachable_answers_4i)
