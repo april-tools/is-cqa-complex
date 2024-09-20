@@ -1219,11 +1219,11 @@ def ground_queries(dataset, query_structures, ent_in, ent_out, train_ent_in, tra
     #logging.info("num sampled answers: {}".format(num_sampled))
 
     name_to_save = '%s-' % (mode)
-    with open('./data/%s/%s-%s-adj-new-queries.pkl' % (dataset, name_to_save,seed), 'wb') as f:
+    with open('./data/%s/%s-%s-4i4p-queries.pkl' % (dataset, name_to_save,seed), 'wb') as f:
         pickle.dump(queries, f)
-    with open('./data/%s/%s-%s-adj-new-easy-answers.pkl' % (dataset, name_to_save,seed), 'wb') as f:
+    with open('./data/%s/%s-%s-4i4p-easy-answers.pkl' % (dataset, name_to_save,seed), 'wb') as f:
         pickle.dump(train_answers, f)
-    with open('./data/%s/%s-%s-adj-new-hard-answers.pkl' % (dataset, name_to_save,seed), 'wb') as f:
+    with open('./data/%s/%s-%s-4i4p-hard-answers.pkl' % (dataset, name_to_save,seed), 'wb') as f:
         pickle.dump(hard_answers, f)
     return queries, train_answers, hard_answers
 
