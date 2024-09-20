@@ -1178,7 +1178,7 @@ def ground_queries(dataset, query_structures, ent_in, ent_out, train_ent_in, tra
             #    key: anch_per_query_overall[list2tuple(query_structure)].get(key, 0) + anch_per_query.get(key, 0) for key
             #    in
             #    set(anch_per_query_overall[list2tuple(query_structure)]) | set(anch_per_query)}
-            if num_sampled > gen_num / 4:
+            if num_sampled > gen_num / 8:
                 top_k_rel_keys, top_k_rel_values = top_k_dict_values_sorting(rel_per_query_temp, 1)
                 perc_top_rel = (top_k_rel_values[0] * 100) / (num_sampled + len(nr_answers))
 
