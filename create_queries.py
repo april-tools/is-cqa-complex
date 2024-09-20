@@ -1400,7 +1400,6 @@ def achieve_answer(query, ent_in, ent_out):
 @click.option('--gen_test', is_flag=True, default=False)
 @click.option('--gen_id', default=0)
 @click.option('--mode', default=None)
-@click.option('--save_name', is_flag=True, default=False)
 @click.option('--index_only', is_flag=True, default=False)
 @click.option('--fourp', is_flag=True, default=False)
 def main(dataset, seed, gen_train_num, gen_valid_num, gen_test_num, max_ans_num, reindex, gen_train, gen_valid,
