@@ -4,6 +4,8 @@ from __future__ import absolute_import
 from __future__ import division
 from __future__ import print_function
 
+import pickle
+
 import torch
 import torch.nn as nn
 from torch import optim, Tensor
@@ -29,7 +31,11 @@ class N3:
 class CQD(nn.Module):
     MIN_NORM = 'min'
     PROD_NORM = 'prod'
+    STANDARD_NEGATION = 'standard'
+    STRICT_COSINE_NEGATION = 'strict_cos'
     NORMS = {MIN_NORM, PROD_NORM}
+    NEGATIONS = {STANDARD_NEGATION, STRICT_COSINE_NEGATION}
+
 
     def __init__(self,
                  nentity: int,
@@ -40,11 +46,16 @@ class CQD(nn.Module):
                  test_batch_size: int = 1,
                  method: str = 'discrete',
                  t_norm_name: str = 'prod',
+                 negation_name: str = 'standard',
                  k: int = 5,
                  query_name_dict: Optional[Dict] = None,
                  do_sigmoid: bool = False,
                  do_normalize: bool = False,
-                 use_cuda: bool = False):
+                 use_cuda: bool = False,
+                 filters = None,
+                 max_norm: int = 1,
+                 max_k: int = 512
+                 ):
         super(CQD, self).__init__()
 
         self.rank = rank
@@ -52,7 +63,11 @@ class CQD(nn.Module):
         self.nrelation = nrelation
         self.method = method
         self.t_norm_name = t_norm_name
+        self.negation_name = negation_name
         self.k = k
+        self.filters = filters
+        self.max_norm = max_norm
+        self.max_k = max_k
         self.query_name_dict = query_name_dict
 
         sizes = (nentity, nrelation)
@@ -149,6 +164,17 @@ class CQD(nn.Module):
             scores = torch.prod(scores, dim=1)
         else:
             raise ValueError(f't_norm must be one of {CQD.NORMS}, got {self.t_norm_name}')
+
+        return scores
+
+    def batch_negations(self, scores: Tensor) -> Tensor:
+        if self.negation_name == CQD.STANDARD_NEGATION:
+            scores = 1.0 - scores
+        elif self.negation_name == CQD.STRICT_COSINE_NEGATION:
+            pi = torch.acos(torch.zeros(1)).item() * 2
+            scores = 0.5 * (1 + torch.cos(pi * scores))
+        else:
+            raise ValueError(f'negation must be one of {CQD.NEGATIONS}, got {self.negation_name}')
 
         return scores
 
@@ -284,6 +310,15 @@ class CQD(nn.Module):
                 def t_conorm(a: Tensor, b: Tensor) -> Tensor:
                     return torch.maximum(a, b)
 
+                def negation(a: Tensor) -> Tensor:
+                    return 1.0 - a # standard negation
+
+                if self.negation_name == CQD.STRICT_COSINE_NEGATION:
+                    def negation(a: Tensor) -> Tensor:
+                        pi = torch.acos(torch.zeros(1)).item() * 2
+                        res = 0.5 * (1 + torch.cos(pi * a))
+                        return res
+
                 if self.t_norm_name == CQD.PROD_NORM:
                     def t_norm(a: Tensor, b: Tensor) -> Tensor:
                         return a * b
@@ -292,70 +327,154 @@ class CQD(nn.Module):
                         return 1 - ((1 - a) * (1 - b))
 
                 def normalize(scores_: Tensor) -> Tensor:
-                    scores_ = scores_ - scores_.min(1, keepdim=True)[0]
-                    scores_ = scores_ / scores_.max(1, keepdim=True)[0]
+                    min_value = scores_.min()
+                    max_value = scores_.max()
+                    # Perform min-max normalization with a range of [0, max_norm]
+                    scores_ = self.max_norm * (scores_ - min_value) / (max_value - min_value)
                     return scores_
 
-                def scoring_function(rel_: Tensor, lhs_: Tensor, rhs_: Tensor) -> Tensor:
+                def scoring_function(lhs_: Tensor, rel_: Tensor, rhs_: Tensor) -> Tensor:
                     res, _ = self.score_o(lhs_, rel_, rhs_)
                     if self.do_sigmoid is True:
                         res = torch.sigmoid(res)
+                        lower_bound = 0.0
+                        upper_bound = self.max_norm
+                        # Adjust the output within the specified boundaries
+                        res = lower_bound + (upper_bound - lower_bound) * res
+
                     if self.do_normalize is True:
                         res = normalize(res)
                     return res
-
+                
                 if graph_type == "1p":
                     scores = d2.query_1p(entity_embeddings=self.embeddings[0],
                                          predicate_embeddings=self.embeddings[1],
                                          queries=queries,
-                                         scoring_function=scoring_function)
+                                         filters=self.filters,
+                                         scoring_function=scoring_function,max_k=self.max_k, max_norm=self.max_norm)
                 elif graph_type == "2p":
                     scores = d2.query_2p(entity_embeddings=self.embeddings[0],
                                          predicate_embeddings=self.embeddings[1],
                                          queries=queries,
+                                         filters=self.filters,
                                          scoring_function=scoring_function,
-                                         k=self.k, t_norm=t_norm)
+                                         k=self.k, t_norm=t_norm,max_k=self.max_k, max_norm=self.max_norm)
                 elif graph_type == "3p":
                     scores = d2.query_3p(entity_embeddings=self.embeddings[0],
                                          predicate_embeddings=self.embeddings[1],
                                          queries=queries,
+                                         filters=self.filters,
                                          scoring_function=scoring_function,
-                                         k=self.k, t_norm=t_norm)
+                                       k=self.k, t_norm=t_norm, max_norm=self.max_norm,max_k=self.max_k)
+
+
+                elif graph_type == "4p":
+
+                    scores = d2.query_4p(entity_embeddings=self.embeddings[0],
+
+                                         predicate_embeddings=self.embeddings[1],
+
+                                         queries=queries,
+
+                                         filters=self.filters,
+
+                                         scoring_function=scoring_function,
+
+                                         k=self.k, t_norm=t_norm, max_norm=self.max_norm, max_k=self.max_k)
+
+
                 elif graph_type == "2i":
+
                     scores = d2.query_2i(entity_embeddings=self.embeddings[0],
+
                                          predicate_embeddings=self.embeddings[1],
+
                                          queries=queries,
-                                         scoring_function=scoring_function, t_norm=t_norm)
+
+                                         filters=self.filters,
+
+                                         scoring_function=scoring_function, t_norm=t_norm, max_k=self.max_k,
+                                         max_norm=self.max_norm)
+
                 elif graph_type == "3i":
+
                     scores = d2.query_3i(entity_embeddings=self.embeddings[0],
+
                                          predicate_embeddings=self.embeddings[1],
+
                                          queries=queries,
-                                         scoring_function=scoring_function, t_norm=t_norm)
+
+                                         filters=self.filters,
+
+                                         scoring_function=scoring_function, t_norm=t_norm, max_k=self.max_k,
+                                         max_norm=self.max_norm)
+
+                elif graph_type == "4i":
+
+                    scores = d2.query_4i(entity_embeddings=self.embeddings[0],
+
+                                         predicate_embeddings=self.embeddings[1],
+
+                                         queries=queries,
+
+                                         filters=self.filters,
+
+                                         scoring_function=scoring_function, t_norm=t_norm, max_k=self.max_k,
+                                         max_norm=self.max_norm)
+
                 elif graph_type == "pi":
                     scores = d2.query_pi(entity_embeddings=self.embeddings[0],
                                          predicate_embeddings=self.embeddings[1],
                                          queries=queries,
+                                         filters=self.filters,
                                          scoring_function=scoring_function,
-                                         k=self.k, t_norm=t_norm)
+                                         k=self.k, t_norm=t_norm, max_k=self.max_k, max_norm=self.max_norm)
                 elif graph_type == "ip":
                     scores = d2.query_ip(entity_embeddings=self.embeddings[0],
                                          predicate_embeddings=self.embeddings[1],
                                          queries=queries,
+                                         filters=self.filters,
                                          scoring_function=scoring_function,
-                                         k=self.k, t_norm=t_norm)
+                                         k=self.k, t_norm=t_norm, max_k=self.max_k, max_norm=self.max_norm)
                 elif graph_type == "2u-DNF":
                     scores = d2.query_2u_dnf(entity_embeddings=self.embeddings[0],
                                              predicate_embeddings=self.embeddings[1],
                                              queries=queries,
+                                             filters=self.filters,
                                              scoring_function=scoring_function,
-                                             t_conorm=t_conorm)
+                                             t_conorm=t_conorm, max_k=self.max_k, max_norm=self.max_norm)
                 elif graph_type == "up-DNF":
                     scores = d2.query_up_dnf(entity_embeddings=self.embeddings[0],
                                              predicate_embeddings=self.embeddings[1],
                                              queries=queries,
+                                             filters=self.filters,
                                              scoring_function=scoring_function,
-                                             k=self.k, t_norm=t_norm, t_conorm=t_conorm)
+                                             k=self.k, t_norm=t_norm, t_conorm=t_conorm, max_k=self.max_k, max_norm=self.max_norm)
                 else:
                     raise ValueError(f'Unknown query type: {graph_type}')
 
         return None, scores, None, all_idxs
+
+    def negation_fn(self, a: Tensor,rel_: Tensor = None) -> Tensor:
+        negations = self.negations
+        if len(negations) > 1:
+            with torch.inference_mode():
+                # [B, NR]
+                rel_distances = torch.cdist(rel_, self.embeddings[1].weight)
+                # [B, 1] -- knn.values should be zero, check
+                knn = rel_distances.topk(1, largest=False)
+                rel_indices = knn.indices.view(-1)
+
+            rel_indices = rel_indices.clone()
+
+
+            res = []
+            for ind, rel_ind in enumerate(rel_indices):
+                res.append(self.negations[f"negation_{rel_ind}"](a[ind]))
+
+            res = torch.stack(res)
+
+        else:
+            res = self.negations[f"negation_{0}"](a)
+
+        return res

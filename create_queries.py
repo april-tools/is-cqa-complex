@@ -147,29 +147,32 @@ def tuple2list(t):
     return list(tuple2list(x) if type(x) == tuple else x for x in t)
 
 
-def write_links(dataset, ent_out, train_ent_out, max_ans_num, name):
+def write_links(dataset, eval_ent_out, train_ent_out, max_ans_num, name):
     queries = defaultdict(set)
     train_answers = defaultdict(set)
     hard_answers = defaultdict(set)
     fp_answers = defaultdict(set)
     num_more_answer = 0
-    for ent in ent_out:
-        for rel in ent_out[ent]:
-            if len(ent_out[ent][rel]) <= max_ans_num:
+    for ent in eval_ent_out:
+        for rel in eval_ent_out[ent]:
+            if len(eval_ent_out[ent][rel]) <= max_ans_num:
                 queries[('e', ('r',))].add((ent, (rel,)))
                 train_answers[(ent, (rel,))] = train_ent_out[ent][rel]
-                hard_answers[(ent, (rel,))] = ent_out[ent][rel]
+                hard_answers[(ent, (rel,))] = eval_ent_out[ent][rel]
             else:
                 num_more_answer += 1
-
-    with open('./data/%s/%s-queries.pkl' % (dataset, name), 'wb') as f:
-        pickle.dump(queries, f)
-    with open('./data/%s/%s-tp-answers.pkl' % (dataset, name), 'wb') as f:
-        pickle.dump(train_answers, f)
-    with open('./data/%s/%s-fn-answers.pkl' % (dataset, name), 'wb') as f:
-        pickle.dump(hard_answers, f)
-    with open('./data/%s/%s-fp-answers.pkl' % (dataset, name), 'wb') as f:
-        pickle.dump(fp_answers, f)
+    if name == 'train-':
+        with open('./data/%s/%s-1p-queries.pkl' % (dataset, name), 'wb') as f:
+            pickle.dump(queries, f)
+        with open('./data/%s/%s-1p-answers.pkl' % (dataset, name), 'wb') as f:
+            pickle.dump(hard_answers, f)
+    else:
+        with open('./data/%s/%s-1p-queries.pkl' % (dataset, name), 'wb') as f:
+            pickle.dump(queries, f)
+        with open('./data/%s/%seasy-1p-answers.pkl' % (dataset, name), 'wb') as f:
+            pickle.dump(train_answers, f)
+        with open('./data/%s/%shard-1p-answers.pkl' % (dataset, name), 'wb') as f:
+            pickle.dump(hard_answers, f)
     print(num_more_answer)
 
 
@@ -206,12 +209,28 @@ def compute_answers_query_4p(entity, rels, ent_out1, ent_out2, ent_out3, ent_out
     return answer_set_final
 
 
-# rel_per_query_1p, rel_per_query_2p, rel_per_query_3p, rel_per_query_2i, rel_per_query_3i, rel_per_query_pi, rel_per_query_ip, rel_per_query_2u, rel_per_query_up= {},{},{},{},{},{},{},{},{}
-# anch_per_query_1p, anch_per_query_2p, anch_per_query_3p, anch_per_query_2i, anch_per_query_3i, anch_per_query_pi, anch_per_query_ip, anch_per_query_2u, anch_per_query_up = {},{}, {}, {}, {}, {}, {}, {}, {}
+def add_to_freq_dict(n_answers, set_rels,set_anchs,rels_freq,anch_freqs):
+    new_set_rel = set()
+    for rel in set_rels:
+        if rel % 2 != 0:
+            # rel is the inverse
+            rel = rel - 1
+        new_set_rel.update({rel})
+    for rel in new_set_rel:
+        if rel in rels_freq:
+            rels_freq[rel] += n_answers
+        else:
+            rels_freq[rel] = n_answers
+
+    for entity in set_anchs:
+        if entity in anch_freqs:
+            anch_freqs[entity] += n_answers
+        else:
+            anch_freqs[entity] = n_answers
+    return rels_freq, anch_freqs, new_set_rel
 
 
-def compute_nr_answers(query_structure, query, test_only_ent_out, train_ent_out, train_answer_set, test_answer_set,
-                       rel_per_query, anch_per_query):
+def compute_fi_pi_answers(query_structure, query, test_only_ent_out, train_ent_out, all_ent_out, train_answer_set, test_answer_set, answer_set):
     # 2p
     if query_structure == ['e', ['r', 'r']]:
         # 0 existing 1 predicted
@@ -225,23 +244,7 @@ def compute_nr_answers(query_structure, query, test_only_ent_out, train_ent_out,
         reachable_answers_1p = (reachableanswers01 | reachableanswers10) - train_answer_set
         reachableanswers11 = compute_answers_query_2p(entity, [rel1, rel2], test_only_ent_out, test_only_ent_out)
         reachable_answers_2p = reachableanswers11 - reachable_answers_1p - train_answer_set
-        if len(reachable_answers_2p) > 0:
-            if rel1 in rel_per_query:
-                rel_per_query[rel1] += len(reachable_answers_2p)
-            else:
-                rel_per_query[rel1] = len(reachable_answers_2p)
-            if rel2 != rel1:
-                if rel2 in rel_per_query:
-                    rel_per_query[rel2] += len(reachable_answers_2p)
-                else:
-                    rel_per_query[rel2] = len(reachable_answers_2p)
-
-            if entity in anch_per_query:
-                anch_per_query[entity] += len(reachable_answers_2p)
-            else:
-                anch_per_query[entity] = len(reachable_answers_2p)
-
-        return reachable_answers_2p, rel_per_query, anch_per_query, [rel1, rel2], [entity]
+        return len(reachable_answers_2p),reachable_answers_2p, [reachable_answers_1p],[rel1, rel2], [entity]
     # 3p
     if query_structure == ['e', ['r', 'r', 'r']]:
         reachable_answers_3p = set()
@@ -250,7 +253,7 @@ def compute_nr_answers(query_structure, query, test_only_ent_out, train_ent_out,
         rel1 = query[1][0]
         rel2 = query[1][1]
         rel3 = query[1][2]
-
+        reachable_answers_2p = set()
         # existing + existing + predicted --> 1p 001
         reachable_answers_001 = compute_answers_query_3p(entity, [rel1, rel2, rel3], train_ent_out, train_ent_out,
                                                          test_only_ent_out)
@@ -260,8 +263,7 @@ def compute_nr_answers(query_structure, query, test_only_ent_out, train_ent_out,
         # predicted + existing + existing --> 1p 100
         reachable_answers_100 = compute_answers_query_3p(entity, [rel1, rel2, rel3], test_only_ent_out, train_ent_out,
                                                          train_ent_out)
-        reachable_answers_1p = (
-                                           reachable_answers_001 | reachable_answers_010 | reachable_answers_100) - train_answer_set  # subtract the train answers
+        reachable_answers_1p = (reachable_answers_001 | reachable_answers_010 | reachable_answers_100) - train_answer_set  # subtract the train answers
 
         if len(reachable_answers_1p) < len(test_answer_set):
             # continue the computation for 2p/3p
@@ -274,35 +276,14 @@ def compute_nr_answers(query_structure, query, test_only_ent_out, train_ent_out,
             # predicted + existing + predicted --> 2p 101
             reachable_answers_101 = compute_answers_query_3p(entity, [rel1, rel2, rel3], test_only_ent_out,
                                                              train_ent_out, test_only_ent_out)
-            reachable_answers_2p = (
-                                               reachable_answers_011 | reachable_answers_110 | reachable_answers_101) - reachable_answers_1p - train_answer_set  # subtract the train answers and the 1p answers
+            reachable_answers_2p = (reachable_answers_011 | reachable_answers_110 | reachable_answers_101) - reachable_answers_1p - train_answer_set  # subtract the train answers and the 1p answers
             if len(reachable_answers_1p | reachable_answers_2p) < len(test_answer_set):
                 # predicted + predicted + existing --> 3p 111
                 reachable_answers_111 = compute_answers_query_3p(entity, [rel1, rel2, rel3], test_only_ent_out,
                                                                  test_only_ent_out, test_only_ent_out)
                 reachable_answers_3p = reachable_answers_111 - reachable_answers_2p - reachable_answers_1p - train_answer_set  # subtract the train answers and the 1p/2p answers
-        if len(reachable_answers_3p) > 0:
-            if rel1 in rel_per_query:
-                rel_per_query[rel1] += len(reachable_answers_3p)
-            else:
-                rel_per_query[rel1] = len(reachable_answers_3p)
-            if rel1 != rel2:
-                if rel2 in rel_per_query:
-                    rel_per_query[rel2] += len(reachable_answers_3p)
-                else:
-                    rel_per_query[rel2] = len(reachable_answers_3p)
-            if rel3 != rel2 and rel3 != rel1:
-                if rel3 in rel_per_query:
-                    rel_per_query[rel3] += len(reachable_answers_3p)
-                else:
-                    rel_per_query[rel3] = len(reachable_answers_3p)
 
-            if entity in anch_per_query:
-                anch_per_query[entity] += len(reachable_answers_3p)
-            else:
-                anch_per_query[entity] = len(reachable_answers_3p)
-
-        return reachable_answers_3p, rel_per_query, anch_per_query, [rel1, rel2, rel3], [entity]
+        return len(reachable_answers_3p),reachable_answers_3p, [reachable_answers_1p,reachable_answers_2p],[rel1, rel2, rel3], [entity]
 
     # 4p
     if query_structure == ['e', ['r', 'r', 'r', 'r']]:
@@ -313,7 +294,7 @@ def compute_nr_answers(query_structure, query, test_only_ent_out, train_ent_out,
         rel2 = query[1][1]
         rel3 = query[1][2]
         rel4 = query[1][3]
-
+        reachable_answers_2p, reachable_answers_3p = set(), set()
         # 1p 0001
         reachable_answers_0001 = compute_answers_query_4p(entity, [rel1, rel2, rel3, rel4], train_ent_out,
                                                           train_ent_out, train_ent_out, test_only_ent_out)
@@ -379,20 +360,8 @@ def compute_nr_answers(query_structure, query, test_only_ent_out, train_ent_out,
                                                                       test_only_ent_out)
 
                     reachable_answers_4p = reachable_answers_1111 - reachable_answers_3p - reachable_answers_2p - reachable_answers_1p - train_answer_set  # subtract the train answers and the 1p/2p answers
-        if len(reachable_answers_4p) > 0:
-            set_rel = ({rel1, rel2, rel3, rel4})
-            for rel in set_rel:
-                if rel in rel_per_query:
-                    rel_per_query[rel] += len(reachable_answers_4p)
-                else:
-                    rel_per_query[rel] = len(reachable_answers_4p)
 
-            if entity in anch_per_query:
-                anch_per_query[entity] += len(reachable_answers_4p)
-            else:
-                anch_per_query[entity] = len(reachable_answers_4p)
-
-        return reachable_answers_4p, rel_per_query, anch_per_query, [rel1, rel2, rel3, rel4], [entity]
+        return len(reachable_answers_4p),reachable_answers_4p, [reachable_answers_1p,reachable_answers_2p,reachable_answers_3p], [rel1, rel2, rel3, rel4], [entity]
 
     # 2i
     if query_structure == [['e', ['r']], ['e', ['r']]]:
@@ -402,7 +371,8 @@ def compute_nr_answers(query_structure, query, test_only_ent_out, train_ent_out,
         rel1 = query[0][1][0]
         entity2 = query[1][0]
         rel2 = query[1][1][0]
-
+        set_rel = ({rel1, rel2})
+        set_ent = ({entity1, entity2})
         # 01
         # compute the answers of the query (entity1,rel1,?y) on the training graph
         answer_set_q1_1 = train_ent_out[entity1][rel1]
@@ -427,27 +397,7 @@ def compute_nr_answers(query_structure, query, test_only_ent_out, train_ent_out,
             answers_11 = answer_set_q1_1 & answer_set_q1_2
             reachable_answers_2i = answers_11 - reachable_answers_1p - train_answer_set
 
-        if len(reachable_answers_2i) > 0:
-            if rel1 in rel_per_query:
-                rel_per_query[rel1] += len(reachable_answers_2i)
-            else:
-                rel_per_query[rel1] = len(reachable_answers_2i)
-            if rel1 != rel2:
-                if rel2 in rel_per_query:
-                    rel_per_query[rel2] += len(reachable_answers_2i)
-                else:
-                    rel_per_query[rel2] = len(reachable_answers_2i)
-
-            if entity1 in anch_per_query:
-                anch_per_query[entity1] += len(reachable_answers_2i)
-            else:
-                anch_per_query[entity1] = len(reachable_answers_2i)
-            if entity1 != entity2:
-                if entity2 in anch_per_query:
-                    anch_per_query[entity2] += len(reachable_answers_2i)
-                else:
-                    anch_per_query[entity2] = len(reachable_answers_2i)
-        return reachable_answers_2i, rel_per_query, anch_per_query, [rel1, rel2], [entity1, entity2]
+        return len(reachable_answers_2i),reachable_answers_2i, [reachable_answers_1p], [rel1, rel2], [entity1, entity2]
     # 3i
     if query_structure == [['e', ['r']], ['e', ['r']], ['e', ['r']]]:
         reachable_answers_3i = set()
@@ -458,7 +408,9 @@ def compute_nr_answers(query_structure, query, test_only_ent_out, train_ent_out,
         rel2 = query[1][1][0]
         entity3 = query[2][0]
         rel3 = query[2][1][0]
-
+        set_rel = ({rel1, rel2, rel3})
+        set_ent = ({entity1, entity2, entity3})
+        reachable_answers_2i = set()
         # 001
         answer_set_q1_1 = train_ent_out[entity1][rel1]
         answer_set_q1_2 = train_ent_out[entity2][rel2]
@@ -505,26 +457,9 @@ def compute_nr_answers(query_structure, query, test_only_ent_out, train_ent_out,
                 answers_111 = answer_set_q1_1 & answer_set_q1_2 & answer_set_q1_3
                 reachable_answers_3i = (answers_111 - reachable_answers_1p - reachable_answers_2i) - train_answer_set
 
-        if len(reachable_answers_3i) > 0:
-            rel_per_query[rel1] = len(reachable_answers_3i)
-            if rel1 != rel2:
-                rel_per_query[rel2] = len(reachable_answers_3i)
-            if rel1 != rel3 and rel2 != rel3:
-                rel_per_query[rel3] = len(reachable_answers_3i)
-
-                anch_per_query[entity1] = len(reachable_answers_3i)
-            if entity1 != entity2:
-                if entity2 in anch_per_query:
-                    anch_per_query[entity2] += len(reachable_answers_3i)
-                else:
-                    anch_per_query[entity2] = len(reachable_answers_3i)
-            if entity1 != entity3 and entity2 != entity3:
-                if entity3 in anch_per_query:
-                    anch_per_query[entity3] += len(reachable_answers_3i)
-                else:
-                    anch_per_query[entity3] = len(reachable_answers_3i)
-
-        return reachable_answers_3i, rel_per_query, anch_per_query, [rel1, rel2, rel3], [entity1, entity2, entity3]
+        return len(reachable_answers_3i), reachable_answers_3i, [
+            reachable_answers_1p,reachable_answers_2i ], [
+                   rel1, rel2,rel3], [entity1, entity2, entity3]
 
     # 4i
     if query_structure == [['e', ['r']], ['e', ['r']], ['e', ['r']], ['e', ['r']]]:
@@ -538,7 +473,10 @@ def compute_nr_answers(query_structure, query, test_only_ent_out, train_ent_out,
         rel3 = query[2][1][0]
         entity4 = query[3][0]
         rel4 = query[3][1][0]
-
+        set_rel = ({rel1, rel2, rel3, rel4})
+        set_ent = ({entity1, entity2, entity3, entity4})
+        reachable_answers_2i = set()
+        reachable_answers_3i = set()
         # 0001
         answer_set_q1_1 = train_ent_out[entity1][rel1]
         answer_set_q1_2 = train_ent_out[entity2][rel2]
@@ -645,7 +583,8 @@ def compute_nr_answers(query_structure, query, test_only_ent_out, train_ent_out,
                 answers_1110 = answer_set_q1_1 & answer_set_q1_2 & answer_set_q1_3 & answer_set_q1_4
 
                 reachable_answers_3i = (answers_0111| answers_1011|answers_1101 |answers_1110) - reachable_answers_1p - reachable_answers_2i - train_answer_set
-
+                if len(reachable_answers_3i)>0:
+                    print()
 
                 if len(reachable_answers_3i |reachable_answers_2i | reachable_answers_1p) < len(test_answer_set):
                     # 1111
@@ -657,23 +596,8 @@ def compute_nr_answers(query_structure, query, test_only_ent_out, train_ent_out,
 
                     reachable_answers_4i = answers_1111 - reachable_answers_1p - reachable_answers_2i- reachable_answers_3i - train_answer_set
 
-
-        if len(reachable_answers_4i) > 0:
-            set_rel = ({rel1, rel2, rel3, rel4})
-            for rel in set_rel:
-                if rel in rel_per_query:
-                    rel_per_query[rel] += len(reachable_answers_4i)
-                else:
-                    rel_per_query[rel] = len(reachable_answers_4i)
-            set_ent = ({entity1, entity2, entity3, entity4})
-            for ent in set_ent:
-                if ent in anch_per_query:
-                    anch_per_query[ent] += len(reachable_answers_4i)
-                else:
-                    anch_per_query[ent] = len(reachable_answers_4i)
-
-        return reachable_answers_4i, rel_per_query, anch_per_query, [rel1, rel2, rel3, rel4], [entity1, entity2, entity3, entity4]
-
+        return len(reachable_answers_4i), reachable_answers_4i, [reachable_answers_1p,reachable_answers_2i,reachable_answers_3i], [
+                   rel1, rel2,rel3,rel4], [entity1, entity2,entity3,entity4]
     # pi
     if query_structure == [['e', ['r', 'r']], ['e', ['r']]]:
         reachable_answers_2i = set()
@@ -684,7 +608,8 @@ def compute_nr_answers(query_structure, query, test_only_ent_out, train_ent_out,
         rel2 = query[0][1][1]
         entity2 = query[1][0]
         rel3 = query[1][1][0]
-
+        set_rel = ({rel1, rel2, rel3})
+        set_ent = ({entity1, entity2})
         # 001
         subquery_2p_answers_00 = compute_answers_query_2p(entity1, [rel1, rel2], train_ent_out, train_ent_out)
 
@@ -720,32 +645,7 @@ def compute_nr_answers(query_structure, query, test_only_ent_out, train_ent_out,
                 answers_111 = subquery_2p_answers_11 & subquery_1p_answers_1
                 reachable_answers_pi = answers_111 - reachable_answers_1p - reachable_answers_2p - reachable_answers_2i - train_answer_set
 
-        if len(reachable_answers_pi) > 0:
-            if rel1 in rel_per_query:
-                rel_per_query[rel1] += len(reachable_answers_pi)
-            else:
-                rel_per_query[rel1] = len(reachable_answers_pi)
-            if rel1 != rel2:
-                if rel2 in rel_per_query:
-                    rel_per_query[rel2] += len(reachable_answers_pi)
-                else:
-                    rel_per_query[rel2] = len(reachable_answers_pi)
-            if rel1 != rel3 and rel2 != rel3:
-                if rel3 in rel_per_query:
-                    rel_per_query[rel3] += len(reachable_answers_pi)
-                else:
-                    rel_per_query[rel3] = len(reachable_answers_pi)
-
-            if entity1 in anch_per_query:
-                anch_per_query[entity1] += len(reachable_answers_pi)
-            else:
-                anch_per_query[entity1] = len(reachable_answers_pi)
-            if entity1 != entity2:
-                if entity2 in anch_per_query:
-                    anch_per_query[entity2] += len(reachable_answers_pi)
-                else:
-                    anch_per_query[entity2] = len(reachable_answers_pi)
-        return reachable_answers_pi, rel_per_query, anch_per_query, [rel1, rel2, rel3], [entity1, entity2]
+        return len(reachable_answers_pi),reachable_answers_pi, [reachable_answers_1p,reachable_answers_2i, reachable_answers_2p], [rel1, rel2, rel3], [entity1, entity2]
     # ip
     if query_structure == [[['e', ['r']], ['e', ['r']]], ['r']]:
         reachable_answers_2i = set()
@@ -756,7 +656,8 @@ def compute_nr_answers(query_structure, query, test_only_ent_out, train_ent_out,
         entity2 = query[0][1][0]
         rel2 = query[0][1][1][0]
         rel3 = query[1][0]
-
+        set_rel = ({rel1, rel2, rel3})
+        set_ent = ({entity1, entity2})
         # 001
         answers_001 = set()
         answer_set_q1_1 = train_ent_out[entity1][rel1]
@@ -822,33 +723,10 @@ def compute_nr_answers(query_structure, query, test_only_ent_out, train_ent_out,
                     answers_111.update(test_only_ent_out[ele][rel3])
                 reachable_answers_ip = answers_111 - reachable_answers_1p - reachable_answers_2p - reachable_answers_2i - train_answer_set
 
-        if len(reachable_answers_ip) > 0:
-            if rel1 in rel_per_query:
-                rel_per_query[rel1] += len(reachable_answers_ip)
-            else:
-                rel_per_query[rel1] = len(reachable_answers_ip)
-            if rel1 != rel2:
-                if rel2 in rel_per_query:
-                    rel_per_query[rel2] += len(reachable_answers_ip)
-                else:
-                    rel_per_query[rel2] = len(reachable_answers_ip)
-            if rel1 != rel3 and rel2 != rel3:
-                if rel3 in rel_per_query:
-                    rel_per_query[rel3] += len(reachable_answers_ip)
-                else:
-                    rel_per_query[rel3] = len(reachable_answers_ip)
+        return len(reachable_answers_ip), reachable_answers_ip, [reachable_answers_1p, reachable_answers_2i,
+                                                                 reachable_answers_2p], [
+                   rel1, rel2, rel3], [entity1, entity2]
 
-            if entity1 in anch_per_query:
-                anch_per_query[entity1] += len(reachable_answers_ip)
-            else:
-                anch_per_query[entity1] = len(reachable_answers_ip)
-            if entity1 != entity2:
-                if entity2 in anch_per_query:
-                    anch_per_query[entity2] += len(reachable_answers_ip)
-                else:
-                    anch_per_query[entity2] = len(reachable_answers_ip)
-
-        return reachable_answers_ip, rel_per_query, anch_per_query, [rel1, rel2, rel3], [entity1, entity2]
     # up
     if query_structure == [[['e', ['r']], ['e', ['r']], ['u']], ['r']]:
         reachable_answers_2p = set()
@@ -859,64 +737,6 @@ def compute_nr_answers(query_structure, query, test_only_ent_out, train_ent_out,
         entity2 = query[0][1][0]
         rel2 = query[0][1][1][0]
         rel3 = query[1][0]
-        '''
-        answers_001 = set()
-        answer_set_q1_1 = train_ent_out[entity1][rel1]
-        answer_set_q1_2 = train_ent_out[entity2][rel2]
-        n_intermediate_ext_answers = max(len(answer_set_q1_1), len(answer_set_q1_2))
-        answers_00 = answer_set_q1_1 | answer_set_q1_2
-        for ele in answers_00:
-            answers_001.update(test_only_ent_out[ele][rel3])
-        # 010
-        answers_010 = set()
-        answer_set_q1_1 = train_ent_out[entity1][rel1]
-        answer_set_q1_2 = test_only_ent_out[entity2][rel2]
-        answers_01 = answer_set_q1_1 | answer_set_q1_2
-        for ele in answers_01:
-            answers_010.update(train_ent_out[ele][rel3])
-        # 100
-        answers_100 = set()
-        answer_set_q1_1 = test_only_ent_out[entity1][rel1]
-        answer_set_q1_2 = train_ent_out[entity2][rel2]
-        answers_10 = answer_set_q1_1 | answer_set_q1_2
-        for ele in answers_10:
-            answers_100.update(train_ent_out[ele][rel3])
-        # 2u is already included in 1p
-        answers_110 = set()
-        answer_set_q1_1 = test_only_ent_out[entity1][rel1]
-        answer_set_q1_2 = test_only_ent_out[entity2][rel2]
-        answers_11 = answer_set_q1_1 | answer_set_q1_2
-        for ele in answers_11:
-            answers_110.update(train_ent_out[ele][rel3])
-
-        reachable_answers_1p = (answers_001 | answers_010 | answers_100 | answers_110) - train_answer_set
-        if len(reachable_answers_1p) < len(test_answer_set):
-            # 2p
-            # 101
-            answers_101 = set()
-            answer_set_q1_1 = test_only_ent_out[entity1][rel1]
-            answer_set_q1_2 = train_ent_out[entity2][rel2]
-            answers_10 = answer_set_q1_1 | answer_set_q1_2
-            for ele in answers_10:
-                answers_101.update(test_only_ent_out[ele][rel3])
-            # 011
-            answers_011 = set()
-            answer_set_q1_1 = train_ent_out[entity1][rel1]
-            answer_set_q1_2 = test_only_ent_out[entity2][rel2]
-            answers_01 = answer_set_q1_1 | answer_set_q1_2
-            for ele in answers_01:
-                answers_011.update(test_only_ent_out[ele][rel3])
-            #reachable_answers_2p = (answers_101 | answers_011) - reachable_answers_1p - reachable_answers_2u - train_answer_set
-             # 111
-            answers_111 = set()
-            answer_set_q1_1 = test_only_ent_out[entity1][rel1]
-            answer_set_q1_2 = test_only_ent_out[entity2][rel2]
-            answers_11 = answer_set_q1_1 | answer_set_q1_2
-            for ele in answers_11:
-                answers_111.update(test_only_ent_out[ele][rel3])
-            reachable_answers_2p = (answers_111 | answers_101 | answers_011) - reachable_answers_1p - train_answer_set
-        '''
-
         # 010
         # If I can reach the same entity  of the '2u' subgraph with both a predicted link and an existing link than
         # this query,a is a 0p since there is a union. To do that I check the entities that are reachable by both link
@@ -987,33 +807,8 @@ def compute_nr_answers(query_structure, query, test_only_ent_out, train_ent_out,
             answers_111.update(test_only_ent_out[ele][rel3])
         reachable_answers_up = answers_111 - reachable_answers_1p - reachable_answers_2u - reachable_answers_0p - train_answer_set
 
-        if len(reachable_answers_up) > 0:
-            if rel1 in rel_per_query:
-                rel_per_query[rel1] += len(reachable_answers_up)
-            else:
-                rel_per_query[rel1] = len(reachable_answers_up)
-            if rel1 != rel2:
-                if rel2 in rel_per_query:
-                    rel_per_query[rel2] += len(reachable_answers_up)
-                else:
-                    rel_per_query[rel2] = len(reachable_answers_up)
-            if rel1 != rel3 and rel2 != rel3:
-                if rel3 in rel_per_query:
-                    rel_per_query[rel3] += len(reachable_answers_up)
-                else:
-                    rel_per_query[rel3] = len(reachable_answers_up)
-
-            if entity1 in anch_per_query:
-                anch_per_query[entity1] += len(reachable_answers_up)
-            else:
-                anch_per_query[entity1] = len(reachable_answers_up)
-            if entity1 != entity2:
-                if entity2 in anch_per_query:
-                    anch_per_query[entity2] += len(reachable_answers_up)
-                else:
-                    anch_per_query[entity2] = len(reachable_answers_up)
-        return reachable_answers_up, rel_per_query, anch_per_query, [rel1, rel2, rel3], [entity1, entity2]
-
+        return len(reachable_answers_up), reachable_answers_up, [reachable_answers_1p, reachable_answers_2u], [
+                   rel1, rel2, rel3], [entity1, entity2]
     # 2u
     if query_structure == [['e', ['r']], ['e', ['r']], ['u']]:
         entity1 = query[0][0]
@@ -1021,6 +816,8 @@ def compute_nr_answers(query_structure, query, test_only_ent_out, train_ent_out,
         entity2 = query[1][0]
         rel2 = query[1][1][0]
         reachable_answers_2u = set()
+        rel_per_query_partial_inf = {}
+        anch_per_query_partial_inf = {}
         # 01
         # compute the answers of the query (entity1,rel1,?y) on the training graph
 
@@ -1043,28 +840,141 @@ def compute_nr_answers(query_structure, query, test_only_ent_out, train_ent_out,
         answer_set_q1_2 = test_only_ent_out[entity2][rel2]
         answers_11 = answer_set_q1_1 & answer_set_q1_2
         reachable_answers_2u = answers_11 - reachable_answers_1p - train_answer_set
-        if len(reachable_answers_2u) > 0:
-            if rel1 in rel_per_query:
-                rel_per_query[rel1] += len(reachable_answers_2u)
-            else:
-                rel_per_query[rel1] = len(reachable_answers_2u)
-            if rel1 != rel2:
-                if rel2 in rel_per_query:
-                    rel_per_query[rel2] += len(reachable_answers_2u)
-                else:
-                    rel_per_query[rel2] = len(reachable_answers_2u)
+        return len(reachable_answers_2u),reachable_answers_2u, [],[rel1, rel2], [entity1, entity2]
 
-            if entity1 in anch_per_query:
-                anch_per_query[entity1] += len(reachable_answers_2u)
-            else:
-                anch_per_query[entity1] = len(reachable_answers_2u)
-            if entity1 != entity2:
-                if entity2 in anch_per_query:
-                    anch_per_query[entity2] += len(reachable_answers_2u)
-                else:
-                    anch_per_query[entity2] = len(reachable_answers_2u)
-        return reachable_answers_2u, rel_per_query, anch_per_query, [rel1, rel2], [entity1, entity2]
+    # Negation
+    # 2in
+    if query_structure == [['e', ['r']], ['e', ['r', 'n']]]:
+        # n_tot_hard_answers_2in += len(hard_answer_set)
+        entity1 = query[0][0]
+        rel1 = query[0][1][0]  # positive
+        entity2 = query[1][0]
+        rel2 = query[1][1][0]  # negative
+        all_ent_r2 = all_ent_out[entity2][rel2]
+        train_ent_r1 = train_ent_out[entity1][rel1]
+        train_ent_r2 = train_ent_out[entity2][rel2]
+        missing_ent_r1 = test_only_ent_out[entity1][rel1]
 
+        # easy answer set
+        new_train_answer_set = (train_ent_r1 - train_ent_r2) & answer_set
+        answers0x = train_ent_r1 - all_ent_r2
+        answers1x = missing_ent_r1 - all_ent_r2
+        reachable_2in_pos_exist = answers0x - new_train_answer_set
+        reachable_2in_pos_only_missing = answers1x - reachable_2in_pos_exist - new_train_answer_set
+        return len(reachable_2in_pos_only_missing),reachable_2in_pos_only_missing, [reachable_2in_pos_exist],[rel1, rel2], [entity1, entity2]
+
+    # 3in
+    if query_structure == [['e', ['r']], ['e', ['r']], ['e', ['r', 'n']]]:
+        entity1 = query[0][0]
+        rel1 = query[0][1][0]  # positive
+        entity2 = query[1][0]
+        rel2 = query[1][1][0]  # positive
+        entity3 = query[2][0]
+        rel3 = query[2][1][0]  # negative
+
+        all_ent_r3 = all_ent_out[entity3][rel3]
+        train_ent_r1 = train_ent_out[entity1][rel1]
+        train_ent_r2 = train_ent_out[entity2][rel2]
+        train_ent_r3 = train_ent_out[entity3][rel3]
+        missing_ent_r1 = test_only_ent_out[entity1][rel1]
+        missing_ent_r2 = test_only_ent_out[entity2][rel2]
+        missing_ent_r3 = test_only_ent_out[entity3][rel3]
+
+        # easy answer set
+        new_train_answer_set = train_answer_set & answer_set
+        new_hard_answer_set = answer_set - new_train_answer_set
+        # answers00x = (train_ent_r1 & train_ent_r2) - all_ent_r3
+        answers01x = (train_ent_r1 & missing_ent_r2) - all_ent_r3
+        answers10x = (missing_ent_r1 & train_ent_r2) - all_ent_r3
+        answers11x = (missing_ent_r1 & missing_ent_r2) - all_ent_r3
+        reachable_3in_pos_exist = (answers01x | answers10x) - new_train_answer_set
+        reachable_3in_pos_only_missing = answers11x - reachable_3in_pos_exist - new_train_answer_set
+
+        return len(reachable_3in_pos_only_missing), reachable_3in_pos_only_missing, [reachable_3in_pos_exist], [
+            rel1, rel2, rel3], [entity1, entity2, entity3]
+
+    # pin
+    if query_structure == [['e', ['r', 'r']], ['e', ['r', 'n']]]:
+        # n_tot_hard_answers_pin += len(hard_answer_set)
+        entity1 = query[0][0]
+        rel1 = query[0][1][0]
+        rel2 = query[0][1][1]
+        entity2 = query[1][0]
+        rel3 = query[1][1][0]  # negation
+
+        all_ent_r3 = all_ent_out[entity2][rel3]
+
+        trainr1_trainr2 = compute_answers_query_2p(entity1, [rel1, rel2], train_ent_out, train_ent_out)
+        trainr1_missingr2 = compute_answers_query_2p(entity1, [rel1, rel2], train_ent_out, test_only_ent_out)
+        missingr1_trainr2 = compute_answers_query_2p(entity1, [rel1, rel2], test_only_ent_out, train_ent_out)
+        missingr1_missingr2 = compute_answers_query_2p(entity1, [rel1, rel2], test_only_ent_out, test_only_ent_out)
+
+        # easy answer set
+        new_train_answer_set = train_answer_set & answer_set
+        new_hard_answer_set = answer_set - new_train_answer_set
+        # answers00x = trainr1_trainr2 - all_ent_r3
+        answers01x = trainr1_missingr2 - all_ent_r3
+        answers10x = missingr1_trainr2 - all_ent_r3
+        answers11x = missingr1_missingr2 - all_ent_r3
+        reachable_pin_pos_exist = (answers01x | answers10x) - new_train_answer_set
+        reachable_pin_pos_only_missing = answers11x - reachable_pin_pos_exist - new_train_answer_set
+        return len(reachable_pin_pos_only_missing), reachable_pin_pos_only_missing, [reachable_pin_pos_exist], [
+            rel1, rel2, rel3], [entity1, entity2]
+
+    # pni
+    if query_structure == [['e', ['r', 'r', 'n']], ['e', ['r']]]:
+        entity1 = query[0][0]
+        rel1 = query[0][1][0]
+        rel2 = query[0][1][1]  # negation on the 2p path query
+        entity2 = query[1][0]
+        rel3 = query[1][1][0]
+        # easy answer set
+        new_train_answer_set = train_answer_set & answer_set
+        all_answers_2p = compute_answers_query_2p(entity1, [rel1, rel2], all_ent_out, all_ent_out)
+        easy_ent_r3 = train_ent_out[entity2][rel3]
+        missing_ent_r3 = test_only_ent_out[entity2][rel3]
+        answersxx0 = easy_ent_r3 - all_answers_2p
+        answersxx1 = missing_ent_r3 - all_answers_2p
+        reachable_pni_pos_exist = answersxx0 - new_train_answer_set
+        reachable_pni_pos_only_missing = answersxx1 - new_train_answer_set
+        return len(reachable_pni_pos_only_missing), reachable_pni_pos_only_missing, [reachable_pni_pos_exist], [
+            rel1, rel2, rel3], [entity1, entity2]
+
+    # inp
+    if query_structure == [[['e', ['r']], ['e', ['r', 'n']]], ['r']]:
+        entity1 = query[0][0][0]
+        rel1 = query[0][0][1][0]
+        entity2 = query[0][1][0]
+        rel2 = query[0][1][1][0]  # negated
+        rel3 = query[1][0]
+
+        all_ent_r2 = all_ent_out[entity2][rel2]
+        train_ent_r1 = train_ent_out[entity1][rel1]
+        missing_ent_r1 = test_only_ent_out[entity1][rel1]
+
+        # easy answer set
+        new_train_answer_set = train_answer_set & answer_set
+        new_hard_answer_set = answer_set - new_train_answer_set
+
+        answers_0x0 = set()
+        answers_0x1 = set()
+        answers_1x0 = set()
+        answers_1x1 = set()
+        answers_0x = train_ent_r1 - all_ent_r2
+        for ele in answers_0x:
+            answers_0x0.update(train_ent_out[ele][rel3])
+        for ele in answers_0x:
+            answers_0x1.update(test_only_ent_out[ele][rel3])
+        answers_1x = missing_ent_r1 - all_ent_r2
+        for ele in answers_1x:
+            answers_1x0.update(train_ent_out[ele][rel3])
+        for ele in answers_1x:
+            answers_1x1.update(test_only_ent_out[ele][rel3])
+
+        reachable_inp_pos_exist = (answers_0x1 | answers_1x0) - new_train_answer_set
+        reachable_inp_pos_only_missing = answers_1x1 - reachable_inp_pos_exist - new_train_answer_set
+        return len(reachable_inp_pos_only_missing), reachable_inp_pos_only_missing, [reachable_inp_pos_exist], [
+            rel1, rel2, rel3], [entity1, entity2]
 
 def top_k_dict_values_sorting(d, k):
     # Sort the dictionary by values in descending order and get the top-k items
@@ -1089,30 +999,34 @@ def get_top_k_frequency(dataset, num_sampled,ele_per_query, type):
             data_dict = pickle.load(f)
     return data_dict[name_top], perc_top
 
-def ground_queries(dataset, query_structures, ent_in, ent_out, train_ent_in, train_ent_out, test_only_ent_in,
-                   test_only_ent_out, gen_num, max_ans_num, query_names, mode, ent2id, rel2id,seed):
-    #print(mode)
+def ground_queries(dataset, query_structures, all_ent_in, all_ent_out, train_ent_in, train_ent_out, test_only_ent_in,
+                   test_only_ent_out, gen_num, gen_num_per_query, max_ans_num, query_names, mode, ent2id, rel2id,seed):
     queries = defaultdict(set)
-    train_answers = defaultdict(set)
+    filtered_answers = defaultdict(set)
     hard_answers = defaultdict(set)
     rel_per_query_overall = defaultdict()
     anch_per_query_overall = defaultdict()
     s0 = time.time()
     random.seed(seed)
-    perc_top_rel = 0
-    perc_top_anch = 0
+    gen_num_origin = gen_num
+
+
     for idx, query_structure in enumerate(query_structures):
         query_name = query_names[idx]
+        gen_num = gen_num_origin
         rel_per_query_overall[list2tuple(query_structure)] = {}
         anch_per_query_overall[list2tuple(query_structure)] = {}
         print('general structure is', query_structure, "with name", query_name)
         ## instead on checking for the gen_num/num_sampled, check the number of answers that figure as non-reduceable; we want 50.000 per query structure
         num_sampled, num_try, num_repeat, num_more_answer, num_broken, num_no_extra_answer, num_no_extra_negative, num_empty = 0, 0, 0, 0, 0, 0, 0, 0
+        tot_qa_pairs = 0
         train_ans_num, hard_ans_num = [], []
         old_num_sampled = -1
-        while num_sampled < gen_num:
+        gen_num_partials = gen_num_per_query[query_name]
+        tot_to_gen = gen_num * (len(gen_num_partials) + 1)
+        while tot_qa_pairs < tot_to_gen:
             if num_sampled != 0:
-                if num_sampled % (gen_num // 100) == 0 and num_sampled != old_num_sampled:
+                if num_sampled % (gen_num // 10) == 0 and num_sampled != old_num_sampled:
                     logging.info(
                         '%s %s: [%d/%d], avg time: %s, try: %s, repeat: %s: more_answer: %s, broken: %s, no extra: %s, no negative: %s empty: %s' % (
                         mode,
@@ -1127,14 +1041,13 @@ def ground_queries(dataset, query_structures, ent_in, ent_out, train_ent_in, tra
             num_try += 1
             empty_query_structure = deepcopy(query_structure)
             # answer = random.sample(ent_in.keys(), 1)[0]
-            answer = random.sample(test_only_ent_in.keys(), 1)[
-                0]  # we search only in the set of entities that appear in the test
-            broken_flag = fill_query(empty_query_structure, ent_in, ent_out, answer, ent2id, rel2id)
+            answer = random.sample(test_only_ent_in.keys(), 1)[0]  # we search only in the set of entities that appear in the test
+            broken_flag = fill_query(empty_query_structure, all_ent_in, all_ent_out, answer, ent2id, rel2id)
             if broken_flag:
                 num_broken += 1
                 continue
             query = empty_query_structure
-            answer_set = achieve_answer(query, ent_in, ent_out)
+            answer_set = achieve_answer(query, all_ent_in, all_ent_out)
             train_answer_set = achieve_answer(query, train_ent_in, train_ent_out)  # only training
             test_answer_set = answer_set - train_answer_set
             if list2tuple(query) in queries[list2tuple(query_structure)]:
@@ -1151,89 +1064,159 @@ def ground_queries(dataset, query_structures, ent_in, ent_out, train_ent_in, tra
                     if len(train_answer_set - answer_set) == 0:
                         num_no_extra_negative += 1
                         continue
-            # nr_answers,rel_per_query,anch_per_query,rels,anchs = compute_nr_answers(query_structure, query,test_only_ent_out, train_ent_out, train_answer_set, test_answer_set)
-            nr_answers, rel_per_query_temp, anch_per_query_temp, rels, anchs = compute_nr_answers(query_structure,
-                                                                                                  query,
-                                                                                                  test_only_ent_out,
-                                                                                                  train_ent_out,
-                                                                                                  train_answer_set,
-                                                                                                  test_answer_set,
-                                                                                                  rel_per_query_overall[
-                                                                                                      list2tuple(
-                                                                                                          query_structure)].copy(),
-                                                                                                  anch_per_query_overall[
-                                                                                                      list2tuple(
-                                                                                                          query_structure)].copy())
-            if len(nr_answers) == 0:
-                num_no_extra_answer += 1
-                continue
+            n_sampled_step, full_inf_answers, partial_inf_answers,rels, anchs = compute_fi_pi_answers(
+                query_structure,
+                query,
+                test_only_ent_out,
+                train_ent_out, all_ent_out,
+                train_answer_set,
+                test_answer_set, answer_set)
+            if num_sampled < gen_num:
+                if n_sampled_step == 0: #check at least one full-inf answer
+                    num_no_extra_answer += 1
+                    continue
+            if num_sampled + n_sampled_step <= gen_num:
+                answerstoadd = full_inf_answers
+            else:
+                k_to_add = gen_num - num_sampled
+                n_sampled_step = k_to_add
+                answerstoadd = set(random.sample(full_inf_answers, k_to_add))
+
+            copy_gen_num_partials = gen_num_partials.copy()
+            for gnidx, gen_num_partial in enumerate(copy_gen_num_partials):
+                if gen_num_partial < gen_num:
+                    temp_tot_partials = copy_gen_num_partials[gnidx]+len(partial_inf_answers[gnidx])
+                    if temp_tot_partials>gen_num:
+                        k_to_add = gen_num - copy_gen_num_partials[gnidx]
+                        partial_inf_to_add = set(random.sample(partial_inf_answers[gnidx], k_to_add))
+
+                    else:
+                        partial_inf_to_add = partial_inf_answers[gnidx]
+                    copy_gen_num_partials[gnidx]+=len(partial_inf_to_add)
+                    answerstoadd = answerstoadd | partial_inf_to_add
+
 
             if max(len(answer_set - train_answer_set), len(train_answer_set - answer_set)) > max_ans_num:
                 num_more_answer += 1
                 continue
-
-            # rel_per_query_temp = {key: rel_per_query_overall[list2tuple(query_structure)].get(key, 0) + rel_per_query.get(key, 0) for key in
-            #                      set(rel_per_query_overall[list2tuple(query_structure)]) | set(rel_per_query)}
-            # anch_per_query_temp = {
-            #    key: anch_per_query_overall[list2tuple(query_structure)].get(key, 0) + anch_per_query.get(key, 0) for key
-            #    in
-            #    set(anch_per_query_overall[list2tuple(query_structure)]) | set(anch_per_query)}
-            if num_sampled > gen_num / 8:
+            #tot_to_gen = gen_num*(len(gen_num_partials)+1)
+            rel_per_query_temp, anch_per_query_temp, new_set_rel = add_to_freq_dict(len(answerstoadd), set(rels),
+                                                                       set(anchs), rel_per_query_overall[
+                                                                           list2tuple(query_structure)].copy(),
+                                                                       anch_per_query_overall[
+                                                                           list2tuple(query_structure)].copy())
+            if tot_qa_pairs > (tot_to_gen/ 10):
                 top_k_rel_keys, top_k_rel_values = top_k_dict_values_sorting(rel_per_query_temp, 1)
-                perc_top_rel = (top_k_rel_values[0] * 100) / (num_sampled + len(nr_answers))
+                perc_top_rel = (top_k_rel_values[0] * 100) / (tot_qa_pairs + len(answerstoadd))
 
                 top_k_anch_keys, top_k_anch_values = top_k_dict_values_sorting(anch_per_query_temp, 1)
-                perc_top_anch = (top_k_anch_values[0] * 100) / (num_sampled + len(nr_answers))
-
-                if (perc_top_rel > 20 and top_k_rel_keys[0] in rels) or (
-                        perc_top_anch > 20 and top_k_anch_keys[0] in anchs):
+                perc_top_anch = (top_k_anch_values[0] * 100) / (tot_qa_pairs + len(answerstoadd))
+                if (perc_top_rel >= 20 and top_k_rel_keys[0] in new_set_rel) or (
+                        perc_top_anch >= 20 and top_k_anch_keys[0] in anchs):
                     num_more_answer += 1
                     continue
-
             rel_per_query_overall[list2tuple(query_structure)] = rel_per_query_temp
             anch_per_query_overall[list2tuple(query_structure)] = anch_per_query_temp
 
-            queries[list2tuple(query_structure)].add(list2tuple(query))
-            train_answers[list2tuple(query)] = answer_set - nr_answers  # train answer set
-            hard_answers[list2tuple(query)] = nr_answers  # hard answer set
-            num_sampled += len(nr_answers)
-            # num_answer_generated += n_non_reduceable_answers
-            # store somewhere also the number of reduceable (?)
-            train_ans_num.append(len(train_answers[list2tuple(query)]))
+            if len(answerstoadd)>0:
+                queries[list2tuple(query_structure)].add(list2tuple(query))
+                filtered_answers[list2tuple(query)] = answer_set - answerstoadd  # filtered answer set
+                hard_answers[list2tuple(query)] = answerstoadd  # hard answer set
+
+            num_sampled += n_sampled_step #cycle based on number of full-inference
+            tot_qa_pairs+= len(answerstoadd)
+            gen_num_partials = copy_gen_num_partials
+            train_ans_num.append(len(filtered_answers[list2tuple(query)]))
             hard_ans_num.append(len(hard_answers[list2tuple(query)]))
-        #logging.info(perc_top_rel)
-        #logging.info(perc_top_anch)
-        key_rel, perc_rel = get_top_k_frequency(dataset, num_sampled,rel_per_query_overall[list2tuple(query_structure)], 'rel')
-        key_ent, perc_anch = get_top_k_frequency(dataset, num_sampled, anch_per_query_overall[list2tuple(query_structure)], 'ent')
-        logging.info(num_sampled)
+        key_rel, perc_rel = get_top_k_frequency(dataset, tot_qa_pairs,rel_per_query_overall[list2tuple(query_structure)], 'rel')
+        key_ent, perc_anch = get_top_k_frequency(dataset, tot_qa_pairs, anch_per_query_overall[list2tuple(query_structure)], 'ent')
+        logging.info("Tot full-inf: " + str(num_sampled))
+        logging.info("Tot qa-pairs: " + str(tot_qa_pairs))
         logging.info("Most present relation name: " + str(key_rel))
         logging.info("Percentage of the relation name wrt total number of (q,a) pair: " + str(perc_rel))
         logging.info("Most present anchor: " + str(key_ent))
         logging.info("Percentage of the anchor wrt total number of (q,a) pair: " + str(perc_anch))
 
-    print()
-    #logging.info("{} tp max: {}, min: {}, mean: {}, std: {}".format(mode, np.max(train_ans_num), np.min(train_ans_num),
-    #                                                                np.mean(train_ans_num), np.std(train_ans_num)))
-    #logging.info("{} fn max: {}, min: {}, mean: {}, std: {}".format(mode, np.max(hard_ans_num), np.min(hard_ans_num),
-    #                                                                np.mean(hard_ans_num), np.std(hard_ans_num)))
-    #logging.info("num sampled answers: {}".format(num_sampled))
-
     name_to_save = '%s-' % (mode)
-    with open('./data/%s/%s-%s-4i4p-queries.pkl' % (dataset, name_to_save,seed), 'wb') as f:
+    with open('./data/%s/%s-%s-propQA-queries.pkl' % (dataset, name_to_save,seed), 'wb') as f:
         pickle.dump(queries, f)
-    with open('./data/%s/%s-%s-4i4p-easy-answers.pkl' % (dataset, name_to_save,seed), 'wb') as f:
-        pickle.dump(train_answers, f)
-    with open('./data/%s/%s-%s-4i4p-hard-answers.pkl' % (dataset, name_to_save,seed), 'wb') as f:
+    with open('./data/%s/%s-%s-propQA-easy-answers.pkl' % (dataset, name_to_save,seed), 'wb') as f:
+        pickle.dump(filtered_answers, f)
+    with open('./data/%s/%s-%s-propQA-hard-answers.pkl' % (dataset, name_to_save,seed), 'wb') as f:
         pickle.dump(hard_answers, f)
-    return queries, train_answers, hard_answers
 
+    return queries, filtered_answers, hard_answers
 
-def generate_queries(dataset, query_structures, gen_num, max_ans_num, gen_train, gen_valid, gen_test, query_names,
+def ground_queries_train(dataset, query_structures, ent_in, ent_out, small_ent_in, small_ent_out, gen_num, max_ans_num, query_names, mode, ent2id, rel2id):
+    num_sampled, num_try, num_repeat, num_more_answer, num_broken, num_no_extra_answer, num_no_extra_negative, num_empty = 0, 0, 0, 0, 0, 0, 0, 0
+    tp_ans_num, fp_ans_num, fn_ans_num = [], [], []
+    queries = defaultdict(set)
+    tp_answers = defaultdict(set)
+    fp_answers = defaultdict(set)
+    fn_answers = defaultdict(set)
+    s0 = time.time()
+    old_num_sampled = -1
+    for idx, query_structure in enumerate(query_structures):
+        query_name = query_names[idx]
+        num_sampled, num_try, num_repeat, num_more_answer, num_broken, num_no_extra_answer, num_no_extra_negative, num_empty = 0, 0, 0, 0, 0, 0, 0, 0
+        while num_sampled < gen_num:
+            if num_sampled != 0:
+                if num_sampled % (gen_num//100) == 0 and num_sampled != old_num_sampled:
+                    logging.info('%s %s: [%d/%d], avg time: %s, try: %s, repeat: %s: more_answer: %s, broken: %s, no extra: %s, no negative: %s empty: %s'%(mode,
+                        query_structure,
+                        num_sampled, gen_num, (time.time()-s0)/num_sampled, num_try, num_repeat, num_more_answer,
+                        num_broken, num_no_extra_answer, num_no_extra_negative, num_empty))
+                    old_num_sampled = num_sampled
+            print ('%s %s: [%d/%d], avg time: %s, try: %s, repeat: %s: more_answer: %s, broken: %s, no extra: %s, no negative: %s empty: %s'%(mode,
+                query_structure,
+                num_sampled, gen_num, (time.time()-s0)/(num_sampled+0.001), num_try, num_repeat, num_more_answer,
+                num_broken, num_no_extra_answer, num_no_extra_negative, num_empty), end='\r')
+            num_try += 1
+            empty_query_structure = deepcopy(query_structure)
+            answer = random.sample(ent_in.keys(), 1)[0]
+            broken_flag = fill_query(empty_query_structure, ent_in, ent_out, answer, ent2id, rel2id)
+            if broken_flag:
+                num_broken += 1
+                continue
+            query = empty_query_structure
+            answer_set = achieve_answer(query, ent_in, ent_out)
+            small_answer_set = achieve_answer(query, small_ent_in, small_ent_out)
+            if len(answer_set) == 0:
+                num_empty += 1
+                continue
+            if mode != 'train':
+                if len(answer_set - small_answer_set) == 0:
+                    num_no_extra_answer += 1
+                    continue
+                if 'n' in query_name:
+                    if len(small_answer_set - answer_set) == 0:
+                        num_no_extra_negative += 1
+                        continue
+            if max(len(answer_set - small_answer_set), len(small_answer_set - answer_set)) > max_ans_num:
+                num_more_answer += 1
+                continue
+            if list2tuple(query) in queries[list2tuple(query_structure)]:
+                num_repeat += 1
+                continue
+            queries[list2tuple(query_structure)].add(list2tuple(query))
+            tp_answers[list2tuple(query)] = small_answer_set
+            fp_answers[list2tuple(query)] = small_answer_set - answer_set
+            fn_answers[list2tuple(query)] = answer_set - small_answer_set
+            num_sampled += 1
+    print ()
+    name_to_save = '%s-'%(mode)
+    with open('./data/%s/%s-queries.pkl'%(dataset, name_to_save), 'wb') as f:
+        pickle.dump(queries, f)
+    with open('./data/%s/%s-answers.pkl'%(dataset, name_to_save), 'wb') as f:
+        pickle.dump(fn_answers, f)
+    return queries, fn_answers
+
+def generate_queries(dataset, query_structures, gen_num, max_ans_num, gen_train, gen_valid, gen_test, gen_num_per_query,query_names,
                      mode,seed):
     base_path = './data/%s' % dataset
     indexified_files = ['train.txt', 'valid.txt', 'test.txt']
     if gen_train or gen_valid:
-        train_ent_in, train_ent_out = construct_graph(base_path, indexified_files[:1])  # ent_in 
+        train_ent_in, train_ent_out = construct_graph(base_path, indexified_files[:1])  # ent_in
     if gen_valid or gen_test:
         valid_ent_in, valid_ent_out = construct_graph(base_path, indexified_files[:2])
         valid_only_ent_in, valid_only_ent_out = construct_graph(base_path, indexified_files[1:2])
@@ -1244,33 +1227,15 @@ def generate_queries(dataset, query_structures, gen_num, max_ans_num, gen_train,
     ent2id = pickle.load(open(os.path.join(base_path, "ent2id.pkl"), 'rb'))
     rel2id = pickle.load(open(os.path.join(base_path, "rel2id.pkl"), 'rb'))
 
-    train_queries = defaultdict(set)
-    train_train_answers = defaultdict(set)
-    train_fp_answers = defaultdict(set)
-    train_hard_answers = defaultdict(set)
-    valid_queries = defaultdict(set)
-    valid_train_answers = defaultdict(set)
-    valid_fp_answers = defaultdict(set)
-    valid_hard_answers = defaultdict(set)
-    test_queries = defaultdict(set)
-    test_answers = defaultdict(set)
-    test_train_answers = defaultdict(set)
-    test_fp_answers = defaultdict(set)
-    test_hard_answers = defaultdict(set)
-
-    t1, t2, t3, t4, t5, t6 = 0, 0, 0, 0, 0, 0
-    # assert len(query_structures) == 1
-
-    # print ('general structure is', query_structure, "with name", query_name)
-    # if query_structure == ['e', ['r']]:
-    #    if gen_train:
-    #        write_links(dataset, train_ent_out, defaultdict(lambda: defaultdict(set)), max_ans_num, 'train-'+query_name)
-    #    if gen_valid:
-    #        write_links(dataset, valid_only_ent_out, train_ent_out, max_ans_num, 'valid-'+query_name)
-    #    if gen_test:
-    #        write_links(dataset, test_only_ent_out, valid_ent_out, max_ans_num, 'test-'+query_name)
-    #    print ("link prediction created!")
-    #    exit(-1)
+    if query_structures[0] == ['e', ['r']]:
+        if gen_train:
+            write_links(dataset, train_ent_out, defaultdict(lambda: defaultdict(set)), max_ans_num, 'train-')
+        if gen_valid:
+            write_links(dataset, valid_only_ent_out, train_ent_out, max_ans_num, 'valid-')
+        if gen_test:
+            write_links(dataset, test_only_ent_out, valid_ent_out, max_ans_num, 'test-')
+        print("link prediction created!")
+        exit(-1)
 
     formatted_date_time = str(datetime.now().strftime("%Y-%m-%d_%H:%M:%S"))
     name_to_save = formatted_date_time + "_new_bench_" + str(dataset) + "_" + str(mode)
@@ -1279,25 +1244,24 @@ def generate_queries(dataset, query_structures, gen_num, max_ans_num, gen_train,
     train_ans_num = []
     s0 = time.time()
     if gen_train:
-        train_queries, train_train_answers, train_hard_answers = ground_queries(dataset, query_structures,
-                                                                                train_ent_in, train_ent_out,
-                                                                                defaultdict(lambda: defaultdict(set)),
-                                                                                defaultdict(lambda: defaultdict(set)),
-                                                                                None, None,
-                                                                                gen_num[0], max_ans_num, query_names,
-                                                                                'train', ent2id, rel2id,seed)
+        train_queries, train_answers = ground_queries_train(dataset, query_structures,
+                                                            train_ent_in, train_ent_out,
+                                                            defaultdict(lambda: defaultdict(set)),
+                                                            defaultdict(lambda: defaultdict(set)),
+                                                            gen_num[0], gen_num_per_query,max_ans_num, query_names, 'train', ent2id,
+                                                            rel2id)
     if gen_valid:
         valid_queries, valid_train_answers, valid_hard_answers = ground_queries(dataset, query_structures,
                                                                                 valid_ent_in, valid_ent_out,
                                                                                 train_ent_in, train_ent_out,
                                                                                 valid_only_ent_in, valid_only_ent_out,
-                                                                                gen_num[1], max_ans_num, query_names,
+                                                                                gen_num[1], gen_num_per_query,max_ans_num, query_names,
                                                                                 'valid', ent2id, rel2id,seed)
     if gen_test:
         test_queries, test_train_answers, test_hard_answers = ground_queries(dataset, query_structures,
                                                                              test_ent_in, test_ent_out, valid_ent_in,
                                                                              valid_ent_out, test_only_ent_in,
-                                                                             test_only_ent_out, gen_num[2], max_ans_num,
+                                                                             test_only_ent_out, gen_num[2], gen_num_per_query,max_ans_num,
                                                                              query_names, 'test', ent2id, rel2id,seed)
     print(dataset)
     print('%s queries generated with structure %s' % (gen_num, query_structures))
@@ -1404,82 +1368,85 @@ def achieve_answer(query, ent_in, ent_out):
 @click.option('--fourp', is_flag=True, default=False)
 def main(dataset, seed, gen_train_num, gen_valid_num, gen_test_num, max_ans_num, reindex, gen_train, gen_valid,
          gen_test, gen_id, mode, index_only, fourp):
-    '''
-    train_num_dict = {'FB15k': 273710, "FB15k-237": 149689, "NELL": 107982}
-    valid_num_dict = {'FB15k': 8000, "FB15k-237": 5000, "NELL": 4000}
-    test_num_dict = {'FB15k': 8000, "FB15k-237": 5000, "NELL": 4000}
-    if gen_train and gen_train_num == 0:
-        if 'FB15k-237' in dataset:
-            gen_train_num = 149689
-        elif 'FB15k' in dataset:
-            gen_train_num = 273710
-        elif 'NELL' in dataset:
-            gen_train_num = 107982
-        else:
-            gen_train_num = train_num_dict[dataset]
-    if gen_valid and gen_valid_num == 0:
-        if 'FB15k-237' in dataset:
-            gen_valid_num = 5000
-        elif 'FB15k' in dataset:
-            gen_valid_num = 8000
-        elif 'NELL' in dataset:
-            gen_valid_num = 4000
-        else:
-            gen_valid_num = valid_num_dict[dataset]
-    if gen_test and gen_test_num == 0:
-        if 'FB15k-237' in dataset:
-            gen_test_num = 5000
-        elif 'FB15k' in dataset:
-            gen_test_num = 8000
-        elif 'NELL' in dataset:
-            gen_test_num = 4000
-        else:
-            gen_test_num = test_num_dict[dataset]
-    if index_only:
-        index_dataset(dataset, reindex)
-        exit(-1)
-    '''
-    #if index_only:
-    #    index_dataset(dataset, reindex)
-    #    exit(-1)
+    gen_num_per_query = { #number of reductions per query type. i.e. 2p has only one element, while 3p has 2 possible reductions
+        "1p": [],
+        "2p" : [0],
+        "3p" : [0, 0],
+        "4p": [0, 0, 0],
+        "2i": [0],
+        "3i": [0, 0],
+        "4i": [0, 0, 0],
+        "pi": [0, 0, 0],
+        "ip": [0, 0, 0],
+        "2u": [],
+        "up": [0, 0],
+        "2in": [],
+        "3in": [0],
+        "pin": [0],
+        "pni": [],
+        "inp": [0]
+    }
     e = 'e'
     r = 'r'
     n = 'n'
     u = 'u'
-    query_structures = [
-        # [e, [r]],
-        #[e, [r, r]],
-        #[e, [r, r, r]],
-        #[[e, [r]], [e, [r]]],
-        #[[e, [r]], [e, [r]], [e, [r]]],
-        #[[e, [r, r]], [e, [r]]],
-        #[[[e, [r]], [e, [r]]], [r]],
-        # negation
-        # [[e, [r]], [e, [r, n]]],
-        # [[e, [r]], [e, [r]], [e, [r, n]]],
-        # [[e, [r, r]], [e, [r, n]]],
-        # [[e, [r, r, n]], [e, [r]]],
-        # [[[e, [r]], [e, [r, n]]], [r]],
-        # union
-        #[[e, [r]], [e, [r]], [u]],
-        #[[[e, [r]], [e, [r]], [u]], [r]],
-        # harder?
-        [e, [r, r, r, r]],
-        [[e, [r]], [e, [r]], [e, [r]], [e, [r]]],
-    ]
-    # query_names = ['1p', '2p', '3p', '2i', '3i', 'pi', 'ip', '2in', '3in', 'pin', 'pni', 'inp', '2u', 'up']
-    #query_names = ['2p', '3p', '2i', '3i', 'pi', 'ip', '2u', 'up']#, '4p', '4i']
-    query_names = ['4p', '4i']
-    #query_names = ['pi', 'ip', '2u', 'up']  #
-    # print(query_structures)
-    # print(dataset)
-    gen_test_num = gen_valid_num = 5000
-    if gen_test:
-        mode = 'test'
-    elif gen_valid:
-        mode='valid'
+    gen_train_num = 149010 #depends on the 1p queries of the specific benchmark
+    if gen_train:
+        query_structures = [
+            #[e, [r]],
+            [e, [r, r]],
+            [e, [r, r, r]],
+            [[e, [r]], [e, [r]]],
+            [[e, [r]], [e, [r]], [e, [r]]],
+            #[[e, [r, r]], [e, [r]]],
+            #[[[e, [r]], [e, [r]]], [r]],
+            # negation
+            [[e, [r]], [e, [r, n]]],
+            [[e, [r]], [e, [r]], [e, [r, n]]],
+            [[e, [r, r]], [e, [r, n]]],
+            [[e, [r, r, n]], [e, [r]]],
+            [[[e, [r]], [e, [r, n]]], [r]],
+            # union
+            #[[e, [r]], [e, [r]], [u]],
+            #[[[e, [r]], [e, [r]], [u]], [r]],
+            # harder?
+            # [e, [r, r, r, r]],
+            # [[e, [r]], [e, [r]], [e, [r]], [e, [r]]],
+        ]
+        #query_names = ['2p', '3p', '2i', '3i', '2in', '3in', 'pin', 'pni', 'inp']
+        query_names = ['3p', '2i', '3i', '2in', '3in', 'pin', 'pni', 'inp']
+    else:
+        query_structures = [
+            #[e, [r]], #to be constructed separately
+            [e, [r, r]],
+            [e, [r, r, r]],
+            [[e, [r]], [e, [r]]],
+            [[e, [r]], [e, [r]], [e, [r]]],
+            [[e, [r, r]], [e, [r]]],
+            [[[e, [r]], [e, [r]]], [r]],
+            # negation
+            # [[e, [r]], [e, [r, n]]],
+            [[e, [r]], [e, [r]], [e, [r, n]]], #3in
+            [[e, [r, r]], [e, [r, n]]], #pin
+            # [[e, [r, r, n]], [e, [r]]],
+            [[[e, [r]], [e, [r, n]]], [r]], #inp
+            # union
+            [[e, [r]], [e, [r]], [u]],
+            [[[e, [r]], [e, [r]], [u]], [r]],
+            # harder?
+            [e, [r, r, r, r]],
+            [[e, [r]], [e, [r]], [e, [r]], [e, [r]]],
+        ]
+        query_names = ['2p','3p', '2i', '3i', 'pi', 'ip', '3in', 'pin', 'inp', '2u', 'up', '4p', '4i']
+
+        
+        gen_test_num = gen_valid_num = 10000
+        if gen_test:
+            mode = 'test'
+        elif gen_valid:
+            mode='valid'
     generate_queries(dataset, query_structures, [gen_train_num, gen_valid_num, gen_test_num], max_ans_num, gen_train,
-                     gen_valid, gen_test, query_names, mode,seed)
+                     gen_valid, gen_test, gen_num_per_query,query_names, mode,seed)
 
 
 if __name__ == '__main__':

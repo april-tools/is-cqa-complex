@@ -9,6 +9,7 @@ import csv
 import json
 import logging
 import os
+from datetime import datetime
 
 import numpy as np
 import torch
@@ -26,10 +27,12 @@ from collections import defaultdict
 from util import flatten_query, parse_time, set_global_seed, eval_tuple
 
 query_name_dict = {('e',('r',)): '1p', 
-                    ('e', ('r', 'r')): '2p',
+                   ('e', ('r', 'r')): '2p',
                     ('e', ('r', 'r', 'r')): '3p',
-                    (('e', ('r',)), ('e', ('r',))): '2i',
+                    ('e', ('r', 'r', 'r', 'r')): '4p',
+                   (('e', ('r',)), ('e', ('r',))): '2i',
                     (('e', ('r',)), ('e', ('r',)), ('e', ('r',))): '3i',
+                    (('e', ('r',)), ('e', ('r',)), ('e', ('r',)), ('e', ('r',))): '4i',
                     ((('e', ('r',)), ('e', ('r',))), ('r',)): 'ip',
                     (('e', ('r', 'r')), ('e', ('r',))): 'pi',
                     (('e', ('r',)), ('e', ('r', 'n'))): '2in',
@@ -57,8 +60,9 @@ def parse_args(args=None):
     parser.add_argument('--do_train', action='store_true', help="do train")
     parser.add_argument('--do_valid', action='store_true', help="do valid")
     parser.add_argument('--do_test', action='store_true', help="do test")
-
+    parser.add_argument('--cqd-max-k', default=512, type=int, help="max possible k in each query step")
     parser.add_argument('--data_path', type=str, default=None, help="KG data path")
+    parser.add_argument('--new_bench_path', type=str, default=None, help="new bench data path")
     parser.add_argument('-n', '--negative_sample_size', default=128, type=int, help="negative entities sampled per query")
     parser.add_argument('-d', '--hidden_dim', default=500, type=int, help="embedding dimension")
     parser.add_argument('-g', '--gamma', default=12.0, type=float, help="margin in the loss")
@@ -85,13 +89,15 @@ def parse_args(args=None):
     parser.add_argument('--optimizer', choices=['adam', 'adagrad'], default='adam')
     parser.add_argument('--cqd-type', '--cqd', default='discrete', type=str, choices=['continuous', 'discrete'])
     parser.add_argument('--cqd-t-norm', default=CQD.PROD_NORM, type=str, choices=CQD.NORMS)
-    parser.add_argument('--cqd-k', default=5, type=int)
+    parser.add_argument('--cqd-negation', default=CQD.STANDARD_NEGATION, type=str, choices=CQD.NEGATIONS)
+    parser.add_argument('--cqd-k', default=2, type=int)
+    parser.add_argument('--cqd-max-norm', default=0.9, type=float)
     parser.add_argument('--cqd-sigmoid-scores', '--cqd-sigmoid', action='store_true', default=False)
     parser.add_argument('--cqd-normalize-scores', '--cqd-normalize', action='store_true', default=False)
     parser.add_argument('--use-qa-iterator', action='store_true', default=False)
     
     parser.add_argument('--tasks', default='1p.2p.3p.2i.3i.ip.pi.2in.3in.inp.pin.pni.2u.up', type=str, help="tasks connected by dot, refer to the BetaE paper for detailed meaning and structure of each task")
-    parser.add_argument('--subtask', default=None, help="define the subtask you want to evaluate")
+    parser.add_argument('--subtask',default="None", type=str)
     parser.add_argument('--seed', default=0, type=int, help="random seed")
     parser.add_argument('-betam', '--beta_mode', default="(1600,2)", type=str, help='(hidden_dim,num_layer) for BetaE relational projection')
     parser.add_argument('-boxm', '--box_mode', default="(none,0.02)", type=str, help='(offset activation,center_reg) for Query2box, center_reg balances the in_box dist and out_box dist')
@@ -126,8 +132,10 @@ def set_logger(args):
     '''
     if args.do_train:
         log_file = os.path.join(args.save_path, 'train.log')
+    elif args.do_valid:
+        log_file = os.path.join(args.save_path, args.tasks +'_valid.log')
     else:
-        log_file = os.path.join(args.save_path, 'test.log')
+        log_file = os.path.join(args.save_path, str(datetime.now().strftime("%Y-%m-%d %H:%M:%S")) + "_"+ args.tasks +'_test.log')
 
     logging.basicConfig(
         format='%(asctime)s %(levelname)-8s %(message)s',
@@ -159,7 +167,10 @@ def evaluate(model, tp_answers, fn_answers, args, dataloader, query_name_dict, m
     average_metrics = defaultdict(float)
     all_metrics = defaultdict(float)
 
+
+
     metrics = KGReasoning.test_step(model, tp_answers, fn_answers, args, dataloader, query_name_dict)
+    print(metrics)
     num_query_structures = 0
     num_queries = 0
     for query_structure in metrics:
@@ -191,21 +202,28 @@ def load_data(args, tasks):
     valid_queries = pickle.load(open(os.path.join(args.data_path, "valid-queries.pkl"), 'rb'))
     valid_hard_answers = pickle.load(open(os.path.join(args.data_path, "valid-hard-answers.pkl"), 'rb'))
     valid_easy_answers = pickle.load(open(os.path.join(args.data_path, "valid-easy-answers.pkl"), 'rb'))
-    if args.subtask is None:
-        test_queries = pickle.load(open(os.path.join(args.data_path, "test-queries.pkl"), 'rb'))
-        test_hard_answers = pickle.load(open(os.path.join(args.data_path, "test-hard-answers.pkl"), 'rb'))
-        test_easy_answers = pickle.load(open(os.path.join(args.data_path, "test-easy-answers.pkl"), 'rb'))
-    else:
-        testsubtaskfolder = "test-query-reduction/"
-        task = str(args.tasks)
-        subtask = str(args.tasks) + str(args.subtask)
-        test_queries = pickle.load(
-            open(os.path.join(args.data_path, testsubtaskfolder + task + "/" + subtask + "_queries.pkl"), 'rb'))
-        test_hard_answers = pickle.load(
-            open(os.path.join(args.data_path, testsubtaskfolder + task + "/" + subtask + "_answers.pkl"), 'rb'))
-        test_easy_answers = pickle.load(
-            open(os.path.join(args.data_path, testsubtaskfolder + task + "/" + subtask + "_filters.pkl"), 'rb'))
+
     
+    if args.subtask == "None":
+        test_queries = pickle.load(open(os.path.join("old_benchmarks", args.data_path, "test-queries.pkl"), 'rb'))
+        test_hard_answers = pickle.load(open(os.path.join("old_benchmarks", args.data_path, "test-hard-answers.pkl"), 'rb'))
+        test_easy_answers = pickle.load(open(os.path.join("old_benchmarks", args.data_path, "test-easy-answers.pkl"), 'rb'))
+    elif args.subtask == "New":
+        test_queries = pickle.load(open(os.path.join("new_benchmarks", args.data_path, "test-queries.pkl"), 'rb'))
+        test_hard_answers = pickle.load(open(os.path.join("new_benchmarks", args.data_path, "test-hard-answers.pkl"), 'rb'))
+        test_easy_answers = pickle.load(open(os.path.join("new_benchmarks", args.data_path, "test-easy-answers.pkl"), 'rb'))
+    else:
+        if 'c_' in args.subtask:
+            testsubtaskfolder = "test-query-card/"
+        else:
+            testsubtaskfolder = "test-query-reduction/"
+        task = str(args.tasks)
+        subtask = str(args.subtask)
+        test_queries = pickle.load(open(os.path.join("new_benchmarks", args.data_path, testsubtaskfolder,task,subtask,"test-queries.pkl"), 'rb'))
+        test_hard_answers = pickle.load(open(os.path.join("new_benchmarks", args.data_path, testsubtaskfolder,task,subtask,"test-hard-answers.pkl"), 'rb'))
+        test_easy_answers = pickle.load(open(os.path.join("new_benchmarks", args.data_path, testsubtaskfolder,task,subtask,"test-easy-answers.pkl"), 'rb'))
+
+
     # remove tasks not in args.tasks
     for name in all_tasks:
         if 'u' in name:
@@ -273,15 +291,16 @@ def main(args):
     
     args.nentity = nentity
     args.nrelation = nrelation
-    
+
     logging.info('-------------------------------'*3)
     logging.info('Geo: %s' % args.geo)
     logging.info('Data Path: %s' % args.data_path)
     logging.info('#entity: %d' % nentity)
     logging.info('#relation: %d' % nrelation)
     logging.info('#max steps: %d' % args.max_steps)
+    logging.info('#max k: %d' % args.cqd_max_k)
     logging.info('Evaluate unoins using: %s' % args.evaluate_union)
-
+    logging.info(args)
     train_queries, train_answers, valid_queries, valid_hard_answers, valid_easy_answers, test_queries, test_hard_answers, test_easy_answers = load_data(args, tasks)        
 
     logging.info("Training info:")
@@ -341,6 +360,7 @@ def main(args):
     logging.info("Test info:")
     if args.do_test:
         for query_structure in test_queries:
+            #print(query_structure[0])
             logging.info(query_name_dict[query_structure]+": "+str(len(test_queries[query_structure])))
         test_queries = flatten_query(test_queries)
         test_dataloader = DataLoader(
@@ -355,6 +375,13 @@ def main(args):
         )
 
     if args.geo == 'cqd':
+        filters = {}
+        if args.do_test and "ICEWS18" not in args.data_path: #load dictionaries containing for each query atom (q,r,?x) the links from the training data,i.e., if test ->train+valid, if valid->train
+            with open(args.data_path + '/to_skip_valid.pickle', 'rb') as f:
+                filters = pickle.load(f)
+        elif args.do_valid and "ICEWS18" not in args.data_path:
+            with open(args.data_path + '/to_skip_train.pickle', 'rb') as f:
+                filters = pickle.load(f)
         model = CQD(nentity,
                     nrelation,
                     rank=args.hidden_dim,
@@ -363,10 +390,15 @@ def main(args):
                     query_name_dict=query_name_dict,
                     method=args.cqd_type,
                     t_norm_name=args.cqd_t_norm,
+                    negation_name=args.cqd_negation,
                     k=args.cqd_k,
                     do_sigmoid=args.cqd_sigmoid_scores,
                     do_normalize=args.cqd_normalize_scores,
-                    use_cuda=args.cuda)
+                    use_cuda=args.cuda,
+                    filters =filters,
+                    max_norm =args.cqd_max_norm,
+                    max_k = args.cqd_max_k
+                    )
     else:
         model = KGReasoning(
             nentity=nentity,
@@ -414,7 +446,6 @@ def main(args):
                                 map_location=torch.device('cpu') if not args.cuda else None)
         init_step = checkpoint['step']
         model.load_state_dict(checkpoint['model_state_dict'])
-
         if args.do_train:
             current_learning_rate = checkpoint['current_learning_rate']
             warm_up_steps = checkpoint['warm_up_steps']
@@ -480,24 +511,6 @@ def main(args):
                 if args.do_test:
                     logging.info('Evaluating on Test Dataset...')
                     test_all_metrics = evaluate(model, test_easy_answers, test_hard_answers, args, test_dataloader, query_name_dict, 'Test', step, writer)
-                    hyperparam_metrics = list(test_all_metrics.items())
-                    MRR = hyperparam_metrics[0][1]
-                    HITS1 = hyperparam_metrics[1][1]
-                    HITS3 = hyperparam_metrics[2][1]
-                    HITS10 = hyperparam_metrics[3][1]
-                    cqd_type = ""
-                    if args.cqd_max_norm == 1:
-                        cqd_type = args.geo
-                    else:
-                        cqd_type = args.geo + "hybrid"
-                    validation_run = [args.tasks, args.subtask, args.cqd_t_norm, args.cqd_k, cqd_type,
-                                      MRR, HITS1, HITS3, HITS10]
-
-                    with open(args.save_path + "/results.csv", mode='a', newline='\n') as file:
-                        # file.write('\n')
-                        csv_writer = csv.writer(file, delimiter=';')
-                        # Append the data to the CSV file
-                        csv_writer.writerow(validation_run)
                 
             if step % args.log_steps == 0:
                 metrics = {}
@@ -522,9 +535,45 @@ def main(args):
     if args.do_test:
         logging.info('Evaluating on Test Dataset...')
         test_all_metrics = evaluate(model, test_easy_answers, test_hard_answers, args, test_dataloader, query_name_dict, 'Test', step, writer)
+        hyperparam_metrics = list(test_all_metrics.items())
+        N_ANSW = hyperparam_metrics[0][1]
+        MRR = hyperparam_metrics[1][1]
+        HITS1 = hyperparam_metrics[2][1]
+        HITS3 = hyperparam_metrics[3][1]
+        HITS10 = hyperparam_metrics[4][1]
+        cqd_type = ""
+        if args.cqd_max_norm == 1:
+            cqd_type = args.geo
+        else:
+            cqd_type = args.geo + "hybrid"
+        validation_run = [args.tasks, args.subtask, args.cqd_t_norm, args.cqd_k, cqd_type,N_ANSW,
+                          MRR, HITS1, HITS3, HITS10]
 
-    logging.info("Training finished!!")
+        with open(args.save_path + "/results.csv", mode='a', newline='\n') as file:
+            csv_writer = csv.writer(file, delimiter=';')
+            # Append the data to the CSV file
+            csv_writer.writerow(validation_run)
+
+    if args.do_valid:
+        logging.info('Evaluating on Valid Dataset...')
+        test_all_metrics = evaluate(model, valid_easy_answers, valid_hard_answers, args, valid_dataloader, query_name_dict, 'Valid', step, writer)
+        hyperparam_metrics = list(test_all_metrics.items())
+        MRR = hyperparam_metrics[0][1]
+        HITS1 = hyperparam_metrics[1][1]
+        HITS3 = hyperparam_metrics[2][1]
+        HITS10 = hyperparam_metrics[3][1]
+
+        validation_run = [args.tasks,args.cqd_t_norm,args.cqd_negation,args.cqd_k,args.cqd_max_norm,args.cqd_max_k,MRR,HITS1,HITS3,HITS10
+                          ]
+        with open(args.save_path+"/hyper.csv", mode='a', newline='\n') as file:
+            csv_writer = csv.writer(file, delimiter=';')
+            # Append the data to the CSV file
+            csv_writer.writerow(validation_run)
+    logging.info("Validation Finished!")
 
 
 if __name__ == '__main__':
-    main(parse_args())
+    args = parse_args()
+
+    main(args)
+

@@ -630,7 +630,6 @@ class KGReasoning(nn.Module):
                         batch_queries_dict[query_structure] = torch.LongTensor(batch_queries_dict[query_structure])
                 if args.cuda:
                     negative_sample = negative_sample.cuda()
-
                 _, negative_logit, _, idxs = model(None, negative_sample, None, batch_queries_dict, batch_idxs_dict)
                 queries_unflatten = [queries_unflatten[i] for i in idxs]
                 query_structures = [query_structures[i] for i in idxs]
@@ -651,6 +650,7 @@ class KGReasoning(nn.Module):
                     num_easy = len(easy_answer)
                     assert len(hard_answer.intersection(easy_answer)) == 0
                     cur_ranking = ranking[idx, list(easy_answer) + list(hard_answer)]
+                    #print(cur_ranking)
                     cur_ranking, indices = torch.sort(cur_ranking)
                     masks = indices >= num_easy
                     if args.cuda:
@@ -664,7 +664,7 @@ class KGReasoning(nn.Module):
                     h1 = torch.mean((cur_ranking <= 1).to(torch.float)).item()
                     h3 = torch.mean((cur_ranking <= 3).to(torch.float)).item()
                     h10 = torch.mean((cur_ranking <= 10).to(torch.float)).item()
-
+                    #print(mrr)
                     logs[query_structure].append({
                         'MRR': mrr,
                         'HITS1': h1,
@@ -677,13 +677,14 @@ class KGReasoning(nn.Module):
                     logging.info('Evaluating the model... (%d/%d)' % (step, total_steps))
 
                 step += 1
-
+        #print(logs)
         metrics = collections.defaultdict(lambda: collections.defaultdict(int))
         for query_structure in logs:
             for metric in logs[query_structure][0].keys():
                 if metric in ['num_hard_answer']:
                     continue
+                metrics[query_structure]['num_hard_answer'] = sum([log['num_hard_answer'] for log in logs[query_structure]])
                 metrics[query_structure][metric] = sum([log[metric] for log in logs[query_structure]])/len(logs[query_structure])
             metrics[query_structure]['num_queries'] = len(logs[query_structure])
-
+        #print(metrics)
         return metrics
