@@ -24,7 +24,7 @@ The folder contains both the old and the new benchmarks, including the benchmark
 
 
 
-### Pre-trained models**
+### Pre-trained models
 All pre-trained models we used in this paper can be downloaded from https://github.com/april-tools/is-cqa-complex/releases/tag/models-v1.0 
 
 
