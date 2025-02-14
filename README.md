@@ -5,30 +5,30 @@ Is Complex Query Answering Complex?
 
 This repo contains several algorithms for multi-hop reasoning on knowledge graphs, including the official PyTorch implementation of [Beta Embeddings for Multi-Hop Logical Reasoning in Knowledge Graphs](https://arxiv.org/abs/2010.11465) and a PyTorch implementation of [Complex Query Answering with Neural Link Predictors](https://arxiv.org/abs/2011.03459).
 
-###Models
+### Models
 - [x] [CQD](https://arxiv.org/abs/2011.03459)
 - [x] [BetaE](https://arxiv.org/abs/2010.11465)
 - [x] [Query2box](https://arxiv.org/abs/2002.05969)
 - [x] [GQE](https://arxiv.org/abs/1806.01445)
 
-###Analysis on benchmarks
+### Analysis on benchmarks
 To reproduce our stratified analysis on both new and old benchmarks, or to execute it for other benchmarks, run `read_queries_pair.py`. 
 To change the benchmark it is sufficient to set the `--dataset` parameter. 
 The script will generate the files to perform both the stratified analysis and the analysis on cardinality, which you can find in the folder `benchmark/test-query-red` and `benchmark/test-query-card`.
 We included such files for each benchmark we considered in the release https://github.com/april-tools/is-cqa-complex/releases/tag/benchs-1.0 
 
-###New benchmarks
+### New benchmarks
 To generate new benchmarks following the strategy we described in the paper, run `create_queries.py`, which is a modified version of the one included in the official PyTorch implementation of [Beta Embeddings for Multi-Hop Logical Reasoning in Knowledge Graphs].
 The KG data and the benchmarks we used in this paper (FB15k237+H, NELL995+H, ICEWS18+H) can be downloaded from https://github.com/april-tools/is-cqa-complex/releases/tag/benchs-1.0 
 The folder contains both the old and the new benchmarks, including the benchmark files for their stratified analysis.
 
 
 
-###Pre-trained models**
+### Pre-trained models**
 All pre-trained models we used in this paper can be downloaded from https://github.com/april-tools/is-cqa-complex/releases/tag/models-v1.0 
 
 
-###Running CQD and CQD-Hybrid
+### Running CQD and CQD-Hybrid
 1. Download new benchmarks and pre-trained models--> see above
 2. To test the subset of 2p queries that can be reduced to 1p using CQD or CQD-Hybrid it is sufficient to set `--tasks -2p` and `--subtask 1p`. For details about CQD-Hybrid see `cqd/CQD.md`
 If subtask `--subtask None`, then the whole orginal set of queries will be tested, while if `--subtask New`, the new set of queries will be tested. An example for NELL995 is provided in `job-NELL995.sh`
