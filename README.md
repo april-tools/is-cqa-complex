@@ -1,5 +1,15 @@
 # is-cqa-complex
-Is Complex Query Answering Complex? https://arxiv.org/pdf/2410.12537 
+This is the official repo of the ***ICML 2025*** spotlight paper "Is Complex Query Answering Complex?" https://arxiv.org/pdf/2410.12537 
+
+If you use our repo, please cite:
+
+@article{gregucci2024complex,
+  title={Is Complex Query Answering Really Complex?},
+  author={Gregucci, Cosimo and Xiong, Bo and Hernandez, Daniel and Loconte, Lorenzo and Minervini, Pasquale and Staab, Steffen and Vergari, Antonio},
+  journal={arXiv preprint arXiv:2410.12537},
+  year={2024}
+}
+
 
 ## KGReasoning
 
@@ -25,7 +35,7 @@ The folder contains both the old and the new benchmarks, including the benchmark
 
 
 ### Pre-trained models
-All pre-trained models we used in this paper can be downloaded from https://github.com/april-tools/is-cqa-complex/releases/tag/models-v1.0 
+All pre-trained models we used in this paper can be downloaded from [here](https://rssiste-my.sharepoint.com/:u:/g/personal/cosimo_gregucci_ms_informatik_uni-stuttgart_de/EccKx4K6sZ1Nhy_fJTL8L44BFtpNRZwmI43-ffPRSmb28g?e=kO5dYk )
 
 
 ### Running CQD and CQD-Hybrid
