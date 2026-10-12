@@ -158,3 +158,10 @@ cython_debug/
 #  and can be added to the global gitignore or merged into this file.  For a more nuclear
 #  option (not recommended) you can uncomment the following to ignore the entire idea folder.
 #.idea/
+
+# Local benchmark releases (published as GitHub releases, not tracked)
+__MACOSX/
+/iscqa-compl-benchmarks/
+/iscqa-compl-benchmarks.zip
+/iscqa-compl-benchmarks-1/
+/iscqa-compl-benchmarks-v1.1.zip

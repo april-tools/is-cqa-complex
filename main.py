@@ -376,10 +376,10 @@ def main(args):
 
     if args.geo == 'cqd':
         filters = {}
-        if args.do_test and "ICEWS18" not in args.data_path: #load dictionaries containing for each query atom (q,r,?x) the links from the training data,i.e., if test ->train+valid, if valid->train
+        if args.do_test: #load dictionaries containing for each query atom (q,r,?x) the links from the training data,i.e., if test ->train+valid, if valid->train
             with open(args.data_path + '/to_skip_valid.pickle', 'rb') as f:
                 filters = pickle.load(f)
-        elif args.do_valid and "ICEWS18" not in args.data_path:
+        elif args.do_valid:
             with open(args.data_path + '/to_skip_train.pickle', 'rb') as f:
                 filters = pickle.load(f)
         model = CQD(nentity,

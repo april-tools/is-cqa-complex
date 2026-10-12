@@ -3,11 +3,33 @@ This is the official repo of the ***ICML 2025*** spotlight paper "Is Complex Que
 
 If you use our repo, please cite:
 
-@article{gregucci2024complex,
-  title={Is Complex Query Answering Really Complex?},
-  author={Gregucci, Cosimo and Xiong, Bo and Hernandez, Daniel and Loconte, Lorenzo and Minervini, Pasquale and Staab, Steffen and Vergari, Antonio},
-  journal={arXiv preprint arXiv:2410.12537},
-  year={2024}
+@inproceedings{DBLP:conf/icml/GregucciX0LMSV25,
+  author       = {Cosimo Gregucci and
+                  Bo Xiong and
+                  Daniel Hern{\'{a}}ndez and
+                  Lorenzo Loconte and
+                  Pasquale Minervini and
+                  Steffen Staab and
+                  Antonio Vergari},
+  editor       = {Aarti Singh and
+                  Maryam Fazel and
+                  Daniel Hsu and
+                  Simon Lacoste{-}Julien and
+                  Felix Berkenkamp and
+                  Tegan Maharaj and
+                  Kiri Wagstaff and
+                  Jerry Zhu},
+  title        = {Is Complex Query Answering Really Complex?},
+  booktitle    = {Forty-second International Conference on Machine Learning, {ICML}
+                  2025, Vancouver, BC, Canada, July 13-19, 2025},
+  series       = {Proceedings of Machine Learning Research},
+  volume       = {267},
+  publisher    = {{PMLR} / OpenReview.net},
+  year         = {2025},
+  url          = {https://proceedings.mlr.press/v267/gregucci25a.html},
+  timestamp    = {Wed, 04 Feb 2026 17:22:45 +0100},
+  biburl       = {https://dblp.org/rec/conf/icml/GregucciX0LMSV25.bib},
+  bibsource    = {dblp computer science bibliography, https://dblp.org}
 }
 
 
@@ -47,6 +69,8 @@ If subtask `--subtask None`, then the whole orginal set of queries will be teste
 ### Results on the new benchmarks
 There is no clear state-of-the-art (SoTA) method for the new benchmarks. As shown in the table below, the Mean Reciprocal Rank (MRR) on the new benchmarks is significantly lower than the old ones. For example, for 3i queries on **FB15k-237+H**, QTO achieves an MRR of **10.1**, whereas for **FB15k237**, it was **54.6**.
 
+**Update (2026-10-11):** the 2in and 2nu1p results are re-computed with the easy-answer files of the benchmark (see issue #1).
+
 ---
 
 
@@ -54,13 +78,13 @@ There is no clear state-of-the-art (SoTA) method for the new benchmarks. As show
 
 | Model | 1p | 2p | 3p | 2i | 3i | 1p2i | 2i1p | 2u | 2u1p | 4p | 4i | 2in | 3in | 2pi1pn | 2nu1p | 2in1p |
 |-------|----|----|----|----|----|------|------|----|------|----|----|-----|-----|---------|--------|-------|
-| GNN-QE      | 42.8 | 5.2 | 4.0 | 6.0 | 8.8 | 5.6 | 9.9 | 32.5 | 10.0 | 4.3 | 20.0 | 6.8 | **6.5** | **3.7** | 5.0 | 3.3 |
+| GNN-QE      | 42.8 | 5.2 | 4.0 | 6.0 | 8.8 | 5.6 | 9.9 | 32.5 | 10.0 | 4.3 | 20.0 | 6.8 | **6.5** | **3.7** | **5.0** | 3.3 |
 | ULTRAQ      | 40.6 | 4.5 | 3.5 | 5.2 | 7.2 | 5.3 | 10.1 | 29.4 | 8.3 | 3.8 | 16.4 | 5.3 | 5.5 | 2.6 | 3.7 | 2.2 |
-| CQD         | **46.7** | 4.4 | 2.4 | **11.3** | **12.8** | 6.0 | 11.5 | 40.1 | 10.6 | 1.1 | **23.8** | 3.3 | 2.6 | 0.6 | 4.9 | 1.2 |
-| CQD-Hybrid  | **46.7** | 4.8 | 3.1 | 6.0 | 8.6 | 5.5 | 12.9 | **42.2** | 12.0 | 2.4 | 17.4 | 4.7 | 1.6 | 1.0 | 3.2 | 1.3 |
+| CQD         | **46.7** | 4.4 | 2.4 | **11.3** | **12.8** | 6.0 | 11.5 | 40.1 | 10.6 | 1.1 | 23.8 | 3.3 | 2.6 | 0.6 | 4.2 | 1.2 |
+| CQD-Hybrid  | **46.7** | 4.8 | 3.1 | 6.0 | 8.6 | 5.5 | 12.9 | **42.2** | 12.0 | 2.4 | 17.4 | 4.7 | 1.6 | 1.0 | 2.4 | 1.3 |
 | ConE        | 41.8 | 4.6 | 3.9 | 9.1 | 10.3 | 3.8 | 7.9 | 22.8 | 6.0 | 3.5 | 20.3 | 5.1 | 4.9 | 2.9 | 3.3 | **3.6** |
-| QTO         | **46.7** | 4.9 | 3.7 | 8.7 | 10.1 | **6.1** | 13.5 | 30.6 | 11.2 | 3.9 | 20.2 | **10.6** | 3.1 | 2.0 | **5.3** | 1.5 |
-| CLMPT       | 45.3 | **5.3** | **4.7** | 10.2 | 12.2 | 5.6 | **14.9** | 33.6 | **14.2** | **4.5** | **24.0** | 6.8 | 2.3 | 1.6 | 4.8 | 2.5 |
+| QTO         | **46.7** | 4.9 | 3.7 | 8.7 | 10.1 | **6.1** | 13.5 | 30.6 | 11.2 | 3.9 | 20.2 | **10.6** | 3.1 | 2.0 | 3.3 | 1.5 |
+| CLMPT       | 45.3 | **5.3** | **4.7** | 10.2 | 12.2 | 5.6 | **14.9** | 33.6 | **14.2** | **4.5** | **24.0** | 5.4 | 2.3 | 1.6 | 3.8 | 2.5 |
 
 ---
 
@@ -70,11 +94,11 @@ There is no clear state-of-the-art (SoTA) method for the new benchmarks. As show
 |-------|----|----|----|----|----|------|------|----|------|----|----|-----|-----|---------|--------|-------|
 | GNN-QE      | 53.6 | 8.0 | 6.0 | 10.7 | 13.3 | 16.0 | 13.5 | 47.5 | 9.8 | 4.7 | 19.4 | 5.5 | **6.4** | **5.8** | 3.3 | 4.4 |
 | ULTRAQ      | 38.9 | 6.1 | 4.1 | 7.9 | 10.2 | 15.8 | 9.3 | 28.1 | 9.5 | 4.2 | 15.6 | 4.5 | 5.9 | 4.3 | 2.7 | 3.6 |
-| CQD         | **60.4** | 9.6 | 4.2 | 18.5 | 19.6 | 18.9 | 22.6 | 46.3 | 18.5 | 2.0 | 24.8 | 4.2 | 1.5 | 1.5 | 4.9 | 2.6 |
-| CQD-Hybrid  | **60.4** | 9.0 | 6.1 | 12.1 | 14.4 | 17.4 | 21.2 | 46.4 | 19.3 | 3.5 | 20.4 | 5.1 | 1.2 | 1.4 | 4.3 | 2.4 |
+| CQD         | **60.4** | 9.6 | 4.2 | 18.5 | 19.6 | 18.9 | 22.6 | 46.3 | 18.5 | 2.0 | 24.8 | 4.2 | 1.5 | 1.5 | 3.6 | 2.6 |
+| CQD-Hybrid  | **60.4** | 9.0 | 6.1 | 12.1 | 14.4 | 17.4 | 21.2 | 46.4 | 19.3 | 3.5 | 20.4 | 5.1 | 1.2 | 1.4 | 2.9 | 2.4 |
 | ConE        | 53.1 | 7.9 | 6.7 | 21.8 | 23.6 | 14.9 | 11.8 | 39.9 | 8.8 | 5.2 | 27.6 | 4.6 | 6.0 | 3.7 | 2.7 | **6.4** |
-| QTO         | 60.3 | 9.8 | **8.0** | 14.6 | 15.8 | **17.6** | 21.1 | **49.1** | 18.9 | **7.0** | 20.9 | **10.2** | 2.3 | 3.1 | **8.4** | 2.4 |
-| CLMPT       | 58.1 | **10.1** | 7.8 | **22.7** | **25.0** | 17.2 | **24.4** | **50.0** | **22.0** | **7.2** | **29.1** | 6.5 | 2.4 | 4.1 | 2.3 | 4.5 |
+| QTO         | 60.3 | 9.8 | **8.0** | 14.6 | 15.8 | **17.6** | 21.1 | 49.1 | 18.9 | 7.0 | 20.9 | **11.3** | 2.3 | 3.1 | **4.3** | 2.4 |
+| CLMPT       | 58.1 | **10.1** | 7.8 | **22.7** | **25.0** | 17.2 | **24.4** | **50.0** | **22.0** | **7.2** | **29.1** | 5.2 | 2.4 | 2.2 | 3.1 | 4.0 |
 
 ---
 
